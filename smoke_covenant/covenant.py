@@ -31,12 +31,12 @@ from cryptography.hazmat.primitives.asymmetric.utils import Prehashed, encode_ds
 from cryptography.hazmat.primitives.hashes import SHA256
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
-from smoke_trust.attestation.windowed import (
+from ._vendor.primitives import (
+    canonical_json_bytes,
     merkle_proof_v0,
     merkle_root_v0,
     verify_inclusion_v0,
 )
-from smoke_trust.iea.contract import canonical_json_bytes
 
 from .gate import HermeticGate, Ingredient
 from .grants import CovenantError, digest_file
@@ -229,7 +229,7 @@ def _verify_anchor(
     covenant: Covenant, require_anchor: bool, pinned: Sequence[bytes]
 ) -> dict:
     """Check the trusted-time witnesses over this covenant's anchor id."""
-    from smoke_trust.audit.rfc3161 import message_imprint_digest, verify_timestamp_token
+    from ._vendor.rfc3161 import message_imprint_digest, verify_timestamp_token
 
     block = covenant.anchor
     if not block or not block.get("witnesses"):

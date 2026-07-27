@@ -114,6 +114,8 @@ def main() -> int:
     check("get_annotated_filepath restored",
           folder_paths.get_annotated_filepath.__name__ == "get_annotated_filepath")
 
+    test_staging_redirects_the_loader_to_gate_owned_bytes()
+
     for f in (granted, ungranted):
         f.unlink(missing_ok=True)
     folder_paths.cache_helper.clear()
@@ -124,6 +126,53 @@ def main() -> int:
         return 1
     print("All adapter checks passed against real ComfyUI folder_paths.")
     return 0
+
+
+
+
+def test_staging_redirects_the_loader_to_gate_owned_bytes():
+    """The TOCTOU fix must reach the ADAPTER, not just the library.
+
+    get_full_path must return a path, so returning the ORIGINAL leaves the window
+    open: the gate hashes one file and ComfyUI's loader opens another. This was
+    the shape of the bug -- admit_staged existed and nothing called it.
+    """
+    import tempfile
+    lora_dir = Path(folder_paths.get_folder_paths("loras")[0])
+    lora_dir.mkdir(parents=True, exist_ok=True)
+    f = lora_dir / "covenant_staging_test.safetensors"
+    f.write_bytes(b"<licensed lora bytes>")
+    folder_paths.cache_helper.clear()
+
+    store = AssetStore()
+    store.register(f, Grant(
+        grant_id="model_grant_204", asset_digest="", kind="model_grant",
+        terms={"territories": ["US"], "expires_on": "2028-01-01"},
+        signer_spki="demo"), label=f.name)
+    ctx = {"territory": "US", "channels": ["paid-social"], "release_end": "2027-02-01"}
+    gate = HermeticGate(store, toy_territory_window_policy(), ctx)
+    staging = Path(tempfile.mkdtemp(prefix="covenant-stage-"))
+
+    with covenant_gate(gate, staging_dir=staging):
+        returned = folder_paths.get_full_path("loras", f.name)
+
+    check("get_full_path returns the STAGED path, not the original",
+          returned is not None and Path(returned).resolve() != f.resolve(),
+          f"returned {returned}")
+    check("staged path lives under the gate-owned staging dir",
+          returned is not None and staging in Path(returned).resolve().parents)
+    check("staged bytes equal the admitted bytes",
+          returned is not None and Path(returned).read_bytes() == b"<licensed lora bytes>")
+    check("basename is preserved for legible logs",
+          returned is not None and Path(returned).name == f.name)
+
+    # Swapping the ORIGINAL after admission must not change what the loader reads.
+    f.write_bytes(b"<UNLICENSED SWAP!!>")
+    check("post-admission swap of the source does not reach the loader",
+          returned is not None and Path(returned).read_bytes() == b"<licensed lora bytes>")
+
+    f.unlink(missing_ok=True)
+    folder_paths.cache_helper.clear()
 
 
 if __name__ == "__main__":

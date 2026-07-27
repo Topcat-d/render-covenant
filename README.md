@@ -41,20 +41,42 @@ was applied to the bytes that shipped.*
 | `smoke_covenant/policies.py` | commercial-use + use-restriction policy over real model licences |
 | `smoke_covenant/adapters/comfy.py` | routes ComfyUI's asset loads through the gate |
 
-## Status: private, and not yet standalone
+## Status: private, and standalone
 
-This is an **extraction in progress**. The package currently imports a small number of
-pure primitives from the parent `smoke-suite` trust layer, which is **not** in this repo:
+The package runs on its own. Only third-party dependency: **`cryptography`**.
 
-- `canonical_json_bytes` (canonical serialization)
-- `merkle_root_v0` / `merkle_proof_v0` / `verify_inclusion_v0`
-- `message_imprint_digest` / `verify_timestamp_token` (RFC 3161)
-- `TSAClient`, `SoftwareMeasurementSigner` (demos only)
+`python test_standalone.py` proves it — it refuses to pass if `smoke_trust` is
+importable at all, then exercises the whole path (gate → issue → verify → selective
+disclosure → tamper → C2PA round trip) to show the result is real rather than an
+import-graph argument.
 
-Until those are vendored in, the tests and demos run only with `smoke-suite` on the
-Python path. Vendoring them — byte-for-byte, with a conformance check against the
-originals — is the work that makes this repo self-contained and is deferred to the
-open-source pass.
+The four primitives it used to borrow are vendored under `smoke_covenant/_vendor/`:
+
+| vendored | how |
+|---|---|
+| `asn1.py`, `rfc3161.py` | copied wholesale — self-contained, stdlib only |
+| `canonical_json_bytes` | extracted; large source module, unrelated deps |
+| `merkle_root_v0` / `_proof_` / `verify_inclusion_` | extracted, same reason |
+
+A hand-extracted canonicalizer or Merkle root that differs from its original by one
+byte does not error — it quietly emits covenants nobody else can verify. So
+`test_vendor_conformance.py` asserts byte-for-byte agreement against the originals
+(500 randomized values, every leaf count 1–33 including the odd-promote path, every
+proof index, plus cross-verification where each implementation must accept the
+other's proofs). That test only runs **in-tree**, where both copies are present.
+
+## Running it
+
+| | |
+|---|---|
+| `python test_standalone.py` | no dependencies beyond `cryptography` |
+| `python demo_covenant.py` | full chain against stand-in assets |
+| `python test_c2pa.py` | C2PA emission and round trip |
+| `python test_anchor.py --live` | real RFC 3161 timestamps (network) |
+
+The ComfyUI pieces (`smoke_covenant/adapters/comfy.py`, `comfy_node/`,
+`render_covenant_demo.py`, and their tests) additionally need a ComfyUI checkout and
+its virtualenv. See `comfy_node/README.md`.
 
 ## Coverage boundary (honest)
 

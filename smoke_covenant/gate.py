@@ -23,11 +23,12 @@ the manifest `hermetic: false` so a verifier can see it.
 from __future__ import annotations
 
 import hashlib
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
-from smoke_trust.iea.contract import canonical_json_bytes
+from ._vendor.primitives import canonical_json_bytes
 
 from .grants import (
     AssetNotRegistered,
@@ -99,20 +100,25 @@ class HermeticGate:
         context: Mapping[str, object],
         *,
         strict: bool = True,
+        staging_dir: str | Path | None = None,
     ) -> None:
         self._store = store
         self._policy = policy
         self._context = dict(context)
         self._strict = strict
+        # Content-addressed staging. Must be a location the parties who can write
+        # the asset store CANNOT write, or the copy inherits the same exposure.
+        self._staging_dir = Path(staging_dir) if staging_dir else None
         self._ingredients: dict[tuple[str, str], Ingredient] = {}
         self._refusals: list[GateDecision] = []
         self._escapes: list[str] = []
         self._digests: dict[tuple[str, int, int], str] = {}
+        self._admitted_paths: set[str] = set()
 
     # --- the rule -----------------------------------------------------------
 
     def _digest(self, path: str | Path) -> str:
-        """Hash `path`, memoized on (abspath, size, mtime_ns) for this render.
+        """Hash `path`, memoized on the OPEN FILE'S identity for this render.
 
         The memo lives HERE and not in an adapter on purpose. A renderer resolves
         the same checkpoint several times per run, and a 6 GB model hashed on each
@@ -121,16 +127,37 @@ class HermeticGate:
         outside the gate, so a buggy adapter could make the gate admit bytes it
         never hashed. The gate stays authoritative for identity AND the rule.
 
-        Tradeoff, stated because it is a real one: a file mutated in place with an
-        identical size and mtime_ns would not be re-hashed within one render's
-        lifetime. That is the standard build-system bargain and the gate is
-        render-scoped, so the window is a single render.
+        WHY THE KEY IS AN OPEN DESCRIPTOR AND NOT (path, size, mtime).
+        The earlier key was (abspath, st_size, st_mtime_ns), and all three are
+        attacker-settable: os.utime sets mtime_ns exactly and padding matches a
+        size. So an attacker with write access to the asset directory could poison
+        one entry and have the stale digest reused for the whole render. Keying on
+        (st_dev, st_ino) READ FROM AN OPEN HANDLE removes the name from the
+        identity entirely -- a replacement file is a different inode, so it misses
+        the memo and gets hashed.
+
+        This narrows the TOCTOU window but does NOT close it, and `admit_open` is
+        the API that does. See its docstring.
         """
-        p = Path(path)
-        st = p.stat()
-        key = (str(p.resolve()), st.st_size, st.st_mtime_ns)
+        with open(path, "rb") as fh:
+            return self._digest_fh(fh)
+
+    def _digest_fh(self, fh) -> str:
+        """Hash from an already-open handle, memoized on (st_dev, st_ino).
+
+        Hashing through the descriptor rather than re-opening by name means the
+        bytes hashed are the bytes of THIS file object, whatever happens to the
+        path afterwards.
+        """
+        st = os.fstat(fh.fileno())
+        key = (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns)
         if key not in self._digests:
-            self._digests[key] = digest_file(p)
+            h = hashlib.sha256()
+            fh.seek(0)
+            while chunk := fh.read(1 << 20):
+                h.update(chunk)
+            fh.seek(0)
+            self._digests[key] = h.hexdigest()
         return self._digests[key]
 
     def admit(self, path: str | Path, role: str) -> str:
@@ -139,7 +166,17 @@ class HermeticGate:
         Raises AssetNotRegistered or PolicyDenied. There is no permissive path and
         no silent fallback: a refusal here is the gate working, not failing.
         """
-        digest = self._digest(path)
+        return self._admit_digest(self._digest(path), path, role)
+
+    def _admit_digest(self, digest: str, path: str | Path, role: str) -> str:
+        """Resolve + evaluate + record for an ALREADY-COMPUTED digest.
+
+        Split out so `admit_open` can hash from its own held descriptor and still
+        run the identical rule. The digest is only ever produced inside this
+        class, never accepted from a caller -- letting a caller supply one would
+        move the identity decision outside the gate, which is the thing the gate
+        exists to own.
+        """
         try:
             grant: Grant = self._store.resolve(digest)
             self._policy.evaluate(grant, self._context)
@@ -154,6 +191,11 @@ class HermeticGate:
             )
             raise
 
+        # Recorded so the escape probe can adjudicate by PATH at teardown instead
+        # of hashing inside its open() hook -- hashing there recursed into the
+        # hook and flagged the gate's own admit-time read as an escape.
+        self._admitted_paths.add(os.path.abspath(str(path)))
+
         ing = Ingredient(
             asset_digest=digest,
             grant_id=grant.grant_id,
@@ -165,8 +207,106 @@ class HermeticGate:
         self._ingredients[(digest, role)] = ing
         return digest
 
+    def admit_staged(self, path: str | Path, role: str) -> tuple[Path, str]:
+        """Copy into gate-owned storage, then admit the COPY. Returns (path, digest).
+
+        THIS IS THE ONLY FULLY TOCTOU-FREE ENTRY POINT.
+
+        Holding a descriptor (see `admit_open`) is not enough, and the reason is
+        worth stating because it is easy to get wrong: opening a path "wb"
+        TRUNCATES AND REWRITES THE SAME INODE. A held handle and an inode-keyed
+        memo both follow that mutation, so an attacker who can write the file
+        defeats them without ever replacing it. Descriptor-holding defends only
+        against path REPLACEMENT (os.replace / unlink+create, which yields a new
+        inode).
+
+        Copying breaks the dependency entirely: the staged copy lives in a
+        directory the renderer's asset-writers do not control, so the bytes hashed
+        remain the bytes read. The digest is computed FROM THE COPY, so even a
+        source mutated mid-copy yields a digest matching whatever was actually
+        captured -- and if that no longer resolves to a grant, it is refused.
+
+        Cost: one copy per distinct digest. Staging is content-addressed, so a
+        6 GB checkpoint is copied once and reused by every later render and every
+        later resolution within a render. Set `staging_dir` on the gate to control
+        where that lives.
+        """
+        if self._staging_dir is None:
+            raise CovenantError(
+                "admit_staged requires a staging_dir; construct the gate with "
+                "HermeticGate(..., staging_dir=<path the renderer cannot write>)"
+            )
+        self._staging_dir.mkdir(parents=True, exist_ok=True)
+
+        tmp = self._staging_dir / f".incoming-{os.getpid()}-{len(self._digests)}"
+        h = hashlib.sha256()
+        with open(path, "rb") as src, open(tmp, "wb") as dst:
+            while chunk := src.read(1 << 20):
+                h.update(chunk)
+                dst.write(chunk)
+        digest = h.hexdigest()
+
+        # <staging>/<digest>/<original name>. The digest directory makes staging
+        # content-addressed (same bytes stage once, ever); keeping the original
+        # filename inside it means anything downstream that takes a basename --
+        # ComfyUI's logs, a node's display name -- still shows "model.safetensors"
+        # rather than a 64-char hash.
+        final_dir = self._staging_dir / digest
+        final = final_dir / Path(path).name
+        if final.exists():
+            tmp.unlink(missing_ok=True)   # already staged by an earlier admit
+        else:
+            final_dir.mkdir(parents=True, exist_ok=True)
+            os.replace(tmp, final)
+
+        try:
+            self._admit_digest(digest, path, role)
+        except BaseException:
+            raise
+        return final, digest
+
+    def admit_open(self, path: str | Path, role: str):
+        """Open ONCE, then hash, resolve and record from that same handle.
+
+        PARTIAL MITIGATION ONLY -- prefer `admit_staged`. This closes the window
+        against path REPLACEMENT (os.replace, unlink+create: a new inode misses
+        the memo and is re-hashed) but NOT against IN-PLACE OVERWRITE, because
+        truncating and rewriting keeps the same inode and this handle follows it.
+
+        `admit(path)` followed by a separate `open(path)` hashes one file and
+        reads another if the bytes are swapped in between: the covenant would then
+        attest the APPROVED digest while the renderer consumed different content.
+        Because a covenant is signed, timestamped and offline-verifiable, that
+        produces authenticated FALSE evidence -- strictly worse than issuing none.
+        An adversary with write access to the asset store during a render is
+        precisely who the hermetic-build model claims to defend against, so this
+        is in-scope, not a theoretical.
+
+        Holding one descriptor across hash-and-use removes the second lookup: the
+        bytes hashed and the bytes read are the same open file, even if the path
+        is replaced immediately afterwards.
+
+        Returns (file_object, digest). The caller MUST read from the returned
+        object, never re-open the path.
+        """
+        fh = open(path, "rb")
+        try:
+            digest = self._digest_fh(fh)
+            self._admit_digest(digest, path, role)
+        except BaseException:
+            fh.close()
+            raise
+        return fh, digest
+
     def open_asset(self, path: str | Path, role: str, mode: str = "rb"):
-        """admit() then open. The only sanctioned way to read an ingredient."""
+        """admit() then open, returning only the file object.
+
+        RETAINS A TOCTOU WINDOW between the hash and this open, and cannot avoid
+        one, because it re-opens by name. Prefer `admit_open`. This exists for
+        callers that need a plain file object and accept the residual risk; the
+        window is far smaller than the adapter's (which must return a path), but
+        it is not zero.
+        """
         self.admit(path, role)
         return open(path, mode)
 
@@ -199,9 +339,27 @@ class HermeticGate:
     def refusals(self) -> list[GateDecision]:
         return list(self._refusals)
 
+    def set_staging_dir(self, staging_dir: str | Path) -> None:
+        """Enable content-addressed staging after construction.
+
+        Lets an adapter turn staging on for a gate the caller built, without the
+        caller needing to know the adapter requires it.
+        """
+        self._staging_dir = Path(staging_dir)
+
+    @property
+    def staging_enabled(self) -> bool:
+        """True when admit_staged is usable — i.e. a staging_dir was supplied."""
+        return self._staging_dir is not None
+
     @property
     def hermetic(self) -> bool:
         return self._strict and not self._escapes
+
+    @property
+    def admitted_paths(self) -> set[str]:
+        """Absolute paths that crossed the gate. Used by the escape probe."""
+        return set(self._admitted_paths)
 
     @property
     def context(self) -> dict:

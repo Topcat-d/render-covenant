@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping, Protocol
 
-from smoke_trust.iea.contract import canonical_json_bytes
+from ._vendor.primitives import canonical_json_bytes
 
 _HASH_CHUNK = 1 << 20  # 1 MiB streaming reads
 

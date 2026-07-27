@@ -56,6 +56,12 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--size", type=int, default=512)
     ap.add_argument("--prompt", default="a surfer at golden hour, cinematic advertising photography")
+    ap.add_argument("--stage", action="store_true",
+                    help="TOCTOU-free mode: copy admitted assets into gate-owned "
+                         "staging and point the loader there. Content-addressed, so "
+                         "a 6.5 GiB checkpoint is copied ONCE and reused by every "
+                         "later run; without it the loader re-opens the original path "
+                         "and a swap between hash and load is not detected.")
     ap.add_argument("--no-anchor", action="store_true",
                     help="skip the RFC 3161 timestamp (offline); the covenant is then "
                          "self-timed and verify() must be told to accept that")
@@ -134,7 +140,8 @@ def main() -> int:
     banner("RENDERING THROUGH THE GATE")
     t0 = time.perf_counter()
     try:
-        with covenant_gate(gate):
+        stage_dir = (HERE / "out" / "_stage") if args.stage else None
+        with covenant_gate(gate, staging_dir=stage_dir):
             model, clip, vae = nodes.CheckpointLoaderSimple().load_checkpoint(ckpt_name)
             if lora_name:
                 model, clip = nodes.LoraLoader().load_lora(model, clip, lora_name, 1.0, 1.0)
