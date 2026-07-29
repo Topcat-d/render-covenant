@@ -6,24 +6,24 @@ DIRECTORY LIST -- so embeddings resolve inside comfy.sd1_clip.load_embed and nev
 touch get_full_path. A render using one would report hermetic:True while an
 unlicensed asset had in fact participated.
 
+ComfyUI is auto-detected (see _paths.py); set COMFYUI_ROOT to override.
+
 Run (no checkpoint needed -- this exercises load_embed directly):
-  "C:/Users/topdy/ComfyUI/.venv/Scripts/python.exe" covenant/test_embedding_gap.py
+  "$COMFYUI_ROOT/.venv/Scripts/python.exe" covenant/test_embedding_gap.py
 """
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-COMFY = Path(os.environ.get("COMFYUI_ROOT", r"C:/Users/topdy/ComfyUI"))
-HERE = Path(__file__).resolve().parent
-SUITE = HERE.parents[0]
-for p in (COMFY, SUITE / "trust", SUITE / "sdks" / "agent" / "python", HERE):
-    sys.path.insert(0, str(p))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _paths import bootstrap_comfy  # noqa: E402
+
+COMFY, SUITE = bootstrap_comfy()
 
 import folder_paths  # noqa: E402
 import torch  # noqa: E402

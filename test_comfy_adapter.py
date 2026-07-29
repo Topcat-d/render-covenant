@@ -4,27 +4,24 @@ Uses stand-in weight files rather than multi-GB checkpoints: the thing under tes
 is whether the hook fires and refuses, which does not depend on the bytes being a
 real model. Real weights get exercised by the end-to-end render demo.
 
+ComfyUI is auto-detected (see _paths.py); set COMFYUI_ROOT to override.
+
 Run:
-  COMFY=C:/Users/topdy/ComfyUI
-  $COMFY/.venv/Scripts/python.exe covenant/test_comfy_adapter.py
+  "$COMFYUI_ROOT/.venv/Scripts/python.exe" covenant/test_comfy_adapter.py
 """
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-COMFY = Path(os.environ.get("COMFYUI_ROOT", r"C:/Users/topdy/ComfyUI"))
-HERE = Path(__file__).resolve().parent
-SUITE = HERE.parents[0]
-sys.path.insert(0, str(COMFY))
-sys.path.insert(0, str(SUITE / "trust"))
-sys.path.insert(0, str(SUITE / "sdks" / "agent" / "python"))
-sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _paths import bootstrap_comfy  # noqa: E402
+
+COMFY, SUITE = bootstrap_comfy()
 
 import folder_paths  # noqa: E402  (real ComfyUI)
 

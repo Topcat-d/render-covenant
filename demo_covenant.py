@@ -19,25 +19,48 @@ from pathlib import Path
 if hasattr(sys.stdout, "reconfigure"):  # Windows consoles default to cp1252
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "trust"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _paths import bootstrap_suite  # noqa: E402
+from _error_help import missing_dependency  # noqa: E402
 
-from smoke_trust.capsule.measurement import SoftwareMeasurementSigner  # noqa: E402
+# The stand-in renderer needs no ComfyUI, and the signer below is the
+# vendored DemoSigner (P-256, ephemeral, in-memory -- see
+# smoke_covenant/_vendor/signer.py), so this script needs no smoke-suite
+# checkout at all. need_suite=False: a suite root is picked up OPTIONALLY if
+# one happens to be present (harmless either way), never required.
+bootstrap_suite(need_suite=False)
 
-from smoke_covenant import (  # noqa: E402
-    AssetNotRegistered,
-    AssetStore,
-    CovenantError,
-    CovenantInvalid,
-    Grant,
-    HermeticGate,
-    PolicyDenied,
-    issue,
-    prove_ingredient,
-    toy_territory_window_policy,
-    verify,
-    verify_ingredient,
-)
+try:
+    from smoke_covenant._vendor.signer import DemoSigner  # noqa: E402
+
+    from smoke_covenant import (  # noqa: E402
+        AssetNotRegistered,
+        AssetStore,
+        CovenantError,
+        CovenantInvalid,
+        Grant,
+        HermeticGate,
+        PolicyDenied,
+        issue,
+        prove_ingredient,
+        toy_territory_window_policy,
+        verify,
+        verify_ingredient,
+    )
+except ModuleNotFoundError as exc:
+    # smoke_covenant hard-depends on `cryptography` (P-256 signing/verification,
+    # RFC 3161 anchoring). This is the one dependency a fresh checkout is
+    # missing more often than any other, and a bare traceback several frames
+    # deep in smoke_covenant.gate or _vendor.signer does not say so -- name it
+    # and give the exact fix instead.
+    if exc.name == "cryptography":
+        missing_dependency(
+            exc,
+            what="'cryptography' is not installed on this interpreter "
+                 "(smoke_covenant's only hard dependency)",
+            remedy=f'"{sys.executable}" -m pip install cryptography',
+        )
+    raise  # anything else is unexpected -- keep the real traceback, don't hide it
 
 OK, NO = "  [OK]", "  [BLOCKED]"
 
@@ -65,7 +88,7 @@ def render(gate: HermeticGate, out: Path, assets: list[tuple[Path, str]]) -> Pat
 
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="covenant-demo-"))
-    signer = SoftwareMeasurementSigner()
+    signer = DemoSigner()
     policy = toy_territory_window_policy()
 
     photo = make(tmp, "surfer.jpg", b"<photo bytes>")

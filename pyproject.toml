@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smoke-covenant"
+version = "0.1.0"
+# NOTE: this is the PACKAGE version, independent of COVENANT_VERSION
+# ("smoke.covenant.v0" in smoke_covenant/covenant.py), which is the wire
+# format version stamped into every issued covenant. Do not conflate the two.
+description = "Render Covenants: hermetic build provenance for media -- binds a signed, offline-verifiable rights decision to the exact bytes a render actually produced. Not a rights engine; see README.md."
+readme = "README.md"
+requires-python = ">=3.11"
+# LICENSE: deliberately left unset. Choosing a licence for this package is
+# the repo owner's decision and is out of scope for this packaging pass --
+# see README.md. Do not add a `license` key or a `License ::` classifier
+# here until that decision is made.
+dependencies = [
+    "cryptography>=41.0.0",
+]
+
+[project.optional-dependencies]
+# Only needed by the ComfyUI-side scripts (render_covenant_demo.py,
+# comfy_node/issue_node.py) and the tests that exercise them -- NOT by
+# smoke_covenant itself. See requirements.txt for exactly which file needs
+# which package. ComfyUI supplies its own CUDA-matched `torch`; this extra
+# deliberately does not include `torch` -- install this inside ComfyUI's own
+# venv, not instead of it.
+comfy = [
+    "numpy>=1.24",
+    "pillow>=9.0",
+    "safetensors>=0.4",
+]
+
+# --- package discovery --------------------------------------------------------
+# Only smoke_covenant (and its real subpackages _vendor and adapters) is
+# distributed from here. comfy_node/ is deliberately NOT part of this wheel --
+# it is a ComfyUI custom node, installed by symlinking comfy_node/ itself into
+# ComfyUI/custom_nodes/ (see comfy_node/README.md), not by pip. The top-level
+# demo/test scripts (demo_covenant.py, render_covenant_demo.py, doctor.py,
+# test_*.py, _paths.py, _error_help.py) are plain scripts run in place, not
+# packaged modules.
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["smoke_covenant*"]

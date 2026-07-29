@@ -21,28 +21,63 @@ that a source patch would not.
 
 ## Install
 
-The package lives in the smoke-suite repo and is linked into ComfyUI, so there
-is one copy and no drift.
+This node needs exactly one sibling to run: `smoke_covenant` (this
+directory's neighbour — it ships with a `_vendor/` subpackage that has
+everything the node needs to sign and anchor on its own). A smoke-suite
+checkout is an **optional bonus**, not a requirement — see
+[Standalone vs. in-tree](#standalone-vs-in-tree) below for what it changes.
+
+**Standalone** (this `covenant/` checkout on its own, no smoke-suite above
+it):
 
 ```bat
 :: Windows (junction — no admin needed)
-mklink /J "C:\Users\me\ComfyUI\custom_nodes\smoke_render_covenant" ^
-          "C:\path\to\smoke-suite\covenant\comfy_node"
+mklink /J "%COMFYUI_ROOT%\custom_nodes\smoke_render_covenant" ^
+          "C:\path\to\covenant\comfy_node"
 ```
 
 ```sh
 # Linux / macOS
-ln -s /path/to/smoke-suite/covenant/comfy_node \
-      ~/ComfyUI/custom_nodes/smoke_render_covenant
+ln -s "/path/to/covenant/comfy_node" \
+      "$COMFYUI_ROOT/custom_nodes/smoke_render_covenant"
 ```
 
-`smoke_covenant` and `smoke_trust` are found by walking up from the resolved
-`__file__`, which works through the link. If you copy the directory instead of
-linking it, set `SMOKE_COVENANT_SUITE=/path/to/smoke-suite`.
+`comfy_node` finds `smoke_covenant` beside itself (its own parent directory —
+see `_covenant_dir()` in `__init__.py`), so nothing else needs to be on disk
+or on `PYTHONPATH`. If you copy `comfy_node` OUT of this checkout on its own
+(rather than linking the whole `covenant/` directory), copy `smoke_covenant`
+(including `smoke_covenant/_vendor/`) alongside it too, or the node will
+refuse to load with a clear `ImportError` naming what it looked for.
+
+**In-tree** (this checkout lives inside the smoke-suite monorepo, or
+`SMOKE_COVENANT_SUITE` points at one): unchanged from before — the suite root
+is found automatically (or via `SMOKE_COVENANT_SUITE=/path/to/smoke-suite`),
+and `smoke_trust` becomes available as a preferred (not required) signer —
+see below.
 
 Then restart ComfyUI and add **Render Covenant (Issue)** (`SmokeCovenantIssue`)
 where you would normally put Save Image. It writes the master PNG itself — see
 [Outputs](#outputs).
+
+### Standalone vs. in-tree
+
+The only thing a smoke-suite checkout changes is **which class wraps an
+operator-supplied signing key** — cosmetic, not behavioural: smoke_trust's
+`SoftwareMeasurementSigner` if the suite is found, the vendored `DemoSigner`
+if not, both signing identically over the same configured key. Everything
+else — the gate, the policy, staging, anchoring, C2PA, refusal semantics — is
+identical either way.
+
+**The one case that actually differs is having NO `signing_key_pem`
+configured at all.** Then the node falls back to `DemoSigner()` generating a
+**fresh, ephemeral, in-memory P-256 key** — a key that dies with the process
+and that nobody can pin to an identity. It still produces a covenant that
+verifies its own bytes, but it proves nothing about who signed it. This is
+fine for a demo; it is **not production evidence**. When this fallback fires,
+the node says so loudly in its output: `WARNING: UNPINNED EPHEMERAL DEMO
+KEY — this covenant cannot be verified by anyone else.` Set
+`signing_key_pem` in the config before treating any covenant as something a
+third party could rely on.
 
 **Start ComfyUI with `--cache-none`.** Without it, re-queueing a workflow serves
 loader nodes from cache, they never resolve their files, and the gate cannot see
@@ -103,7 +138,7 @@ it resolve against the config file's own directory.
 | `thread_affinity` | `true` | confine the gate to the render thread. See §3 |
 | `staging_dir` | none | content-addressed staging. **Set this** — it is the only fully TOCTOU-free path (see `gate.admit_staged`). Must be somewhere your asset writers cannot write |
 | `output_dir` | ComfyUI's output dir | where masters and covenants go. A custom dir disables the UI thumbnail |
-| `signing_key_pem` | none | PEM EC private key. Without it each run signs with an **ephemeral** key that verifies bytes but binds no identity |
+| `signing_key_pem` | none | PEM EC private key. Without it each run signs with a fresh **ephemeral, unpinnable demo key** (see [Standalone vs. in-tree](#standalone-vs-in-tree)) — the node warns loudly in its output when this fires |
 | `anchor` | `false` | request RFC 3161 trusted-time witnesses. Needs network; a TSA outage then fails the render |
 | `renderer_identity` | `{}` | extra fields folded into the covenant's `renderer` block |
 
@@ -241,8 +276,13 @@ Everything that routes through, **on the thread ComfyUI executes the prompt on**
 ## Testing
 
 ```
-C:/Users/topdy/ComfyUI/.venv/Scripts/python.exe covenant/test_comfy_node.py
+"$COMFYUI_ROOT/.venv/Scripts/python.exe" covenant/test_comfy_node.py
 ```
+
+ComfyUI is auto-detected if not set (see `covenant/_paths.py`): common sibling
+locations relative to this repo, then `~/ComfyUI` / `~/comfyui`. Set
+`COMFYUI_ROOT` to point at yours explicitly, and `SMOKE_COVENANT_SUITE` if this
+directory has been copied out of its smoke-suite checkout (see Install above).
 
 Covers the mapping shape, provider registration, the open/close bracket and its
 patch restoration, arming failures, refusal of an ungranted asset, thread

@@ -1,5 +1,13 @@
 """The vendored primitives must be BYTE-FOR-BYTE identical to their originals.
 
+IN-TREE ONLY. This is a conformance check, not a portable test: it compares
+`smoke_covenant._vendor.primitives` against the `smoke_trust` originals it was
+copied from, so it can only run somewhere both are importable -- a checkout of
+the smoke-suite monorepo. In the standalone public repo `smoke_trust` does not
+exist at all, there is nothing to conform to, and a test that always failed
+there would be worse than no test: SKIP cleanly (exit 0) instead. See
+`_paths.resolve_suite_root()`.
+
 This is the test that makes extraction safe. A hand-copied canonicalizer or
 Merkle implementation that differs from the original by one byte does not error
 -- it quietly emits covenants nobody else can verify, which is the worst failure
@@ -10,7 +18,7 @@ importable. Randomized inputs, not a handful of fixtures, because the interestin
 divergences hide in odd shapes: odd leaf counts (the promote path), unicode keys,
 nested containers, large integers.
 
-  "C:/Users/topdy/Smoke(new)/smoke-suite/.venv/Scripts/python.exe" covenant/test_vendor_conformance.py
+  python covenant/test_vendor_conformance.py
 """
 
 from __future__ import annotations
@@ -23,10 +31,23 @@ from pathlib import Path
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-HERE = Path(__file__).resolve().parent
-SUITE = HERE.parents[0]
-for p in (SUITE / "trust", SUITE / "sdks" / "agent" / "python", HERE):
-    sys.path.insert(0, str(p))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _paths import HERE, bootstrap_suite  # noqa: E402
+
+# Do NOT require a suite root here: its absence means "this is the standalone
+# public repo", which is a SKIP, not a crash.
+SUITE = bootstrap_suite(need_suite=False)
+if SUITE is None:
+    print("=" * 74)
+    print("Vendored primitives vs smoke_trust originals")
+    print("=" * 74)
+    print("  [SKIP] no smoke-suite checkout found -- smoke_trust is unavailable.")
+    print("         This conformance check only makes sense in-tree, where both")
+    print("         the vendored copy and the smoke_trust original it was copied")
+    print("         from are importable. Set SMOKE_COVENANT_SUITE to point at a")
+    print("         smoke-suite checkout to run it for real.")
+    print("=" * 74)
+    raise SystemExit(0)
 
 # originals
 from smoke_trust.attestation.windowed import (  # noqa: E402

@@ -204,21 +204,57 @@ def _write_pubkey(master: Path, signer) -> None:
 
 
 def _build_signer(cfg) -> tuple[object, bool]:
-    """(signer, is_ephemeral). An ephemeral key still signs, but binds no identity."""
-    from smoke_trust.capsule.measurement import SoftwareMeasurementSigner
+    """(signer, is_ephemeral). An ephemeral key still signs, but binds no identity.
 
-    if cfg.signing_key_pem is None:
-        return SoftwareMeasurementSigner(), True
-    from cryptography.hazmat.primitives.serialization import load_pem_private_key
+    JUDGEMENT CALL, spelled out rather than papered over: the vendored
+    `DemoSigner` (smoke_covenant._vendor.signer) generates a fresh EPHEMERAL
+    in-memory key when constructed with none. That is fine for a demo; for a
+    production node it means a covenant signed under a key nobody can pin --
+    close to worthless as evidence. So an operator-supplied `signing_key_pem`
+    is honoured exactly as it always was (loaded and wrapped, never regenerated),
+    and DemoSigner's ephemeral-generation path fires ONLY when no key is
+    configured at all -- and that fallback is called out LOUDLY in the node's
+    UI text (see `_summary`), so nobody mistakes a demo-signed covenant for
+    production evidence.
 
-    key = load_pem_private_key(cfg.signing_key_pem.read_bytes(), password=None)
-    return SoftwareMeasurementSigner(key), False
+    The wrapper class for a CONFIGURED key prefers smoke_trust's
+    SoftwareMeasurementSigner when the suite is present (unchanged behaviour
+    for an in-tree install) and falls back to the vendored DemoSigner
+    otherwise -- it satisfies the identical sign()/public_key() protocol over
+    a supplied key, so the signature this produces is the same either way.
+    Preferring smoke_trust here is a nicety, not a requirement: this node must
+    work fully without it.
+    """
+    if cfg.signing_key_pem is not None:
+        from cryptography.hazmat.primitives.serialization import load_pem_private_key
+
+        key = load_pem_private_key(cfg.signing_key_pem.read_bytes(), password=None)
+        return _keyed_signer_class()(key), False
+
+    from smoke_covenant._vendor.signer import DemoSigner
+
+    return DemoSigner(), True
+
+
+def _keyed_signer_class():
+    """The class that wraps an operator-supplied signing key. Prefers
+    smoke_trust's SoftwareMeasurementSigner when importable (identical
+    in-tree behaviour); otherwise the vendored DemoSigner, which exists
+    precisely to satisfy this same protocol standalone -- see its docstring."""
+    try:
+        from smoke_trust.capsule.measurement import SoftwareMeasurementSigner
+
+        return SoftwareMeasurementSigner
+    except Exception:  # noqa: BLE001 - absence is the whole standalone point
+        from smoke_covenant._vendor.signer import DemoSigner
+
+        return DemoSigner
 
 
 def _tsa_clients(cfg):
     if not cfg.anchor:
         return []
-    from smoke_trust.audit.anchor import (
+    from smoke_covenant._vendor.tsa import (
         DEFAULT_COMMERCIAL_TSA_URL, DEFAULT_SIGSTORE_TSA_URL, TSAClient,
     )
 
@@ -252,9 +288,12 @@ def _summary(gate, sess, covenants, ephemeral: bool) -> str:
         )
     if ephemeral:
         lines.append(
-            "  WARNING: signed with an EPHEMERAL key generated for this run. It "
-            "verifies the bytes but binds no identity -- set signing_key_pem in "
-            "the config for a covenant anyone can attribute."
+            "  WARNING: UNPINNED EPHEMERAL DEMO KEY -- this covenant cannot be "
+            "verified by anyone else. No signing_key_pem was configured, so this "
+            "run generated a fresh in-memory key that dies with the process. It "
+            "verifies the bytes are self-consistent and proves nothing about who "
+            "signed them. Do NOT treat this as production evidence -- set "
+            "signing_key_pem in the config to sign with a key someone can pin."
         )
     lines += [f"  covenant: {p}" for p in covenants]
     return "\n".join(lines)

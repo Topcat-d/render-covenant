@@ -8,8 +8,10 @@ Generates a stand-in of realistic size rather than downloading weights -- the
 thing under test is hashing cost and hook behaviour at scale, which does not
 depend on the bytes being a real model.
 
+ComfyUI is auto-detected (see _paths.py); set COMFYUI_ROOT to override.
+
 Run:
-  "C:/Users/topdy/ComfyUI/.venv/Scripts/python.exe" covenant/test_large_asset.py [GiB]
+  "$COMFYUI_ROOT/.venv/Scripts/python.exe" covenant/test_large_asset.py [GiB]
 """
 
 from __future__ import annotations
@@ -22,11 +24,10 @@ from pathlib import Path
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-COMFY = Path(os.environ.get("COMFYUI_ROOT", r"C:/Users/topdy/ComfyUI"))
-HERE = Path(__file__).resolve().parent
-SUITE = HERE.parents[0]
-for p in (COMFY, SUITE / "trust", SUITE / "sdks" / "agent" / "python", HERE):
-    sys.path.insert(0, str(p))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _paths import bootstrap_comfy  # noqa: E402
+
+COMFY, SUITE = bootstrap_comfy()
 
 import folder_paths  # noqa: E402
 

@@ -1,0 +1,59 @@
+# Render Covenant (smoke_covenant) — dependency list.
+#
+# Derived by reading every top-level `import` in the library, not by
+# guessing. The library (smoke_covenant/*.py and smoke_covenant/_vendor/*.py,
+# smoke_covenant/adapters/*.py) touches only the standard library plus ONE
+# third-party package:
+#
+#   smoke_covenant/covenant.py           cryptography.hazmat.primitives.asymmetric.ec,
+#                                        cryptography.hazmat.primitives.asymmetric.utils
+#                                        (ECDSA, Prehashed, encode_dss_signature),
+#                                        cryptography.exceptions.InvalidSignature,
+#                                        cryptography.hazmat.primitives.hashes,
+#                                        cryptography.hazmat.primitives.serialization
+#   smoke_covenant/_vendor/rfc3161.py    cryptography.hazmat.primitives.asymmetric
+#                                        (ec, rsa, padding) + cryptography.x509
+#                                        (only inside extract_signer_spki_ders, a
+#                                        bootstrap convenience, not the verify path)
+#   smoke_covenant/gate.py,              stdlib only: hashlib, os, dataclasses,
+#   smoke_covenant/grants.py,            pathlib, typing
+#   smoke_covenant/c2pa.py,
+#   smoke_covenant/policies.py,
+#   smoke_covenant/adapters/comfy.py,
+#   smoke_covenant/_vendor/asn1.py
+#
+# so this is genuinely the whole install for the library:
+cryptography>=41.0.0
+# Floor matches trust/requirements.txt and trust/pyproject.toml, the sibling
+# package this one was extracted from -- not independently re-verified below
+# that floor. Confirmed working at 49.0.0 in this checkout's dev venv and in
+# ComfyUI's own venv (both checked 2026-07-29). No upper bound is asserted;
+# none has been tested.
+
+# -----------------------------------------------------------------------------
+# NOT needed by smoke_covenant itself. Needed only to run the ComfyUI-side
+# scripts that live in this same directory:
+#   render_covenant_demo.py, comfy_node/issue_node.py,
+#   test_comfy_adapter.py, test_comfy_node.py, test_embedding_gap.py,
+#   test_large_asset.py
+#
+# Those scripts run INSIDE ComfyUI's own virtual environment, not this one --
+# see covenant/QUICKSTART.md, Track 2. ComfyUI already installs its own
+# CUDA-matched `torch` build; do not add a `torch` line here or to ComfyUI's
+# venv from this file -- let ComfyUI's own installer choose it.
+#
+# `pip install -r requirements.txt` does NOT install the three lines below;
+# they are commented out on purpose and listed for awareness only. For a
+# real, pip-installable optional group, use pyproject.toml's `comfy` extra
+# instead: `pip install -e .[comfy]` (run from inside this directory)
+# installs exactly these three, into whichever environment you run it in.
+#
+# numpy>=1.24        array <-> image conversion. Confirmed working at 2.4.4
+#                    in ComfyUI's venv here (2026-07-29).
+#                    Used by: render_covenant_demo.py, comfy_node/issue_node.py
+# pillow>=9.0        writes the covenanted PNG master with no metadata.
+#                    Confirmed working at 12.2.0 in ComfyUI's venv here.
+#                    Used by: render_covenant_demo.py, comfy_node/issue_node.py
+# safetensors>=0.4   only to fabricate a fixture tensor in one test.
+#                    Confirmed working at 0.8.0 in ComfyUI's venv here.
+#                    Used by: test_embedding_gap.py

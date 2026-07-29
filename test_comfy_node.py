@@ -10,8 +10,10 @@ caught instead of quietly producing a short ingredient list.
 Nothing here needs a GPU or a real checkpoint: stand-in files exercise every
 decision the packaging makes.
 
+ComfyUI is auto-detected (see _paths.py); set COMFYUI_ROOT to override.
+
 Run:
-  C:/Users/topdy/ComfyUI/.venv/Scripts/python.exe covenant/test_comfy_node.py
+  "$COMFYUI_ROOT/.venv/Scripts/python.exe" covenant/test_comfy_node.py
 """
 
 from __future__ import annotations
@@ -28,13 +30,16 @@ from pathlib import Path
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-COMFY = Path(os.environ.get("COMFYUI_ROOT", r"C:/Users/topdy/ComfyUI"))
-HERE = Path(__file__).resolve().parent
-SUITE = HERE.parents[0]
-for _p in (str(COMFY), str(SUITE / "trust"), str(SUITE / "sdks" / "agent" / "python"),
-           str(HERE)):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _paths import HERE, SUITE_ROOT_ENV, bootstrap_comfy  # noqa: E402
+
+# NOTE: the NODE no longer needs smoke_trust -- it falls back to the vendored
+# DemoSigner/TSAClient and loads standalone (proven separately). This TEST still
+# requires the suite root, deliberately: it exercises the in-tree path including
+# the "second copy adopts the existing provider" case, which resolves
+# smoke_covenant via SMOKE_COVENANT_SUITE. Requiring it here is a property of the
+# test fixture, not of the node.
+COMFY, SUITE = bootstrap_comfy(need_suite=True)
 
 import folder_paths  # noqa: E402  (real ComfyUI)
 
@@ -376,7 +381,7 @@ def test_second_copy(pkg, tmp: Path) -> None:
     dest = tmp / "custom_nodes" / "smoke_render_covenant_copy"
     shutil.copytree(HERE / "comfy_node", dest,
                     ignore=shutil.ignore_patterns("__pycache__"))
-    os.environ["SMOKE_COVENANT_SUITE"] = str(SUITE)
+    os.environ[SUITE_ROOT_ENV] = str(SUITE)
     try:
         name = "smoke_render_covenant_copy"
         spec = importlib.util.spec_from_file_location(name, dest / "__init__.py")
@@ -388,7 +393,7 @@ def test_second_copy(pkg, tmp: Path) -> None:
               f"{type(exc).__name__}: {exc}")
         return
     finally:
-        os.environ.pop("SMOKE_COVENANT_SUITE", None)
+        os.environ.pop(SUITE_ROOT_ENV, None)
 
     check("a copied install imports via SMOKE_COVENANT_SUITE", True,
           f"suite root {module.SUITE_ROOT}")

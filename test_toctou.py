@@ -11,8 +11,11 @@ The old memo made it durable rather than momentary: it was keyed on
 sets mtime_ns exactly; padding matches a size), so ONE poisoning was reused for
 the whole render.
 
+This test needs neither ComfyUI nor smoke_trust -- only smoke_covenant's own
+gate -- so it runs anywhere with this package's dependencies installed.
+
 Run:
-  "C:/Users/topdy/ComfyUI/.venv/Scripts/python.exe" covenant/test_toctou.py
+  python covenant/test_toctou.py
 """
 
 from __future__ import annotations
@@ -25,10 +28,12 @@ from pathlib import Path
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-HERE = Path(__file__).resolve().parent
-SUITE = HERE.parents[0]
-for p in (SUITE / "trust", SUITE / "sdks" / "agent" / "python", HERE):
-    sys.path.insert(0, str(p))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _paths import bootstrap_suite  # noqa: E402
+
+# No smoke_trust dependency here, so don't require a suite root -- this must
+# keep working in the standalone public repo, where there is none.
+bootstrap_suite(need_suite=False)
 
 from smoke_covenant import (  # noqa: E402
     AssetStore, Grant, HermeticGate, toy_territory_window_policy,

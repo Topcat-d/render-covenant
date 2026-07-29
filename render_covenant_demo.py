@@ -7,9 +7,14 @@ exact PNG bytes, verifiable by a third party offline.
 Needs models. Put at least one checkpoint in ComfyUI/models/checkpoints and
 (optionally, but it is the interesting one) a LoRA in ComfyUI/models/loras.
 
-  "C:/Users/topdy/ComfyUI/.venv/Scripts/python.exe" covenant/render_covenant_demo.py
-  ... --deny-lora     register the LoRA with a UK-only grant to watch it BLOCK
-  ... --steps 8       faster
+ComfyUI is auto-detected (see _paths.py); set COMFYUI_ROOT to override.
+
+  "$COMFYUI_ROOT/.venv/Scripts/python.exe" covenant/render_covenant_demo.py
+  ... --lora dmd2            CC-BY-NC-4.0 in a paid ad -> BLOCKED on a real load
+  ... --lora dmd2 --non-commercial   same asset, internal use -> admitted
+  ... --lora pixel           OpenRAIL-M -> renders, covenant issued
+  ... --steps 8              faster
+  ... --stage                TOCTOU-free: loader reads gate-owned staged copies
 
 Node signatures verified against ComfyUI @806e092 nodes.py:
   CheckpointLoaderSimple.load_checkpoint(ckpt_name) -> (MODEL, CLIP, VAE)   :627
@@ -31,7 +36,6 @@ is deliberately out of scope for v0.
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 import time
 from pathlib import Path
@@ -39,11 +43,15 @@ from pathlib import Path
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-COMFY = Path(os.environ.get("COMFYUI_ROOT", r"C:/Users/topdy/ComfyUI"))
-HERE = Path(__file__).resolve().parent
-SUITE = HERE.parents[0]
-for p in (COMFY, SUITE / "trust", SUITE / "sdks" / "agent" / "python", HERE):
-    sys.path.insert(0, str(p))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _paths import HERE, bootstrap_comfy, script_prefix  # noqa: E402
+from _error_help import missing_dependency  # noqa: E402
+
+# Needs a real ComfyUI checkout (models, a real render) but, like
+# demo_covenant.py, the signer and RFC 3161 client below are the vendored
+# copies (smoke_covenant/_vendor/signer.py, smoke_covenant/_vendor/tsa.py), so
+# no smoke-suite checkout is required -- only ComfyUI itself.
+COMFY, SUITE = bootstrap_comfy(need_suite=False)
 
 
 def banner(t: str) -> None:
@@ -77,27 +85,57 @@ def main() -> int:
     loras = folder_paths.get_filename_list("loras")
     if not checkpoints:
         print("NO CHECKPOINTS FOUND in " + str(COMFY / "models" / "checkpoints"))
-        print("Drop an SD1.5 or SDXL .safetensors there and re-run.")
+        print("  Fix: drop an SD1.5 or SDXL .safetensors there, e.g. stable-diffusion-xl-base-1.0")
+        print("       https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0")
+        print(f"  Full picture: python {script_prefix()}doctor.py")
         return 2
     ckpt_name = checkpoints[0]
     if args.lora:
         matches = [n for n in loras if args.lora.lower() in n.lower()]
         if not matches:
-            print(f"no LoRA matching {args.lora!r} in: {loras}")
+            available = ", ".join(loras) if loras else f"(none found in {COMFY / 'models' / 'loras'})"
+            print(f"no LoRA matching {args.lora!r}")
+            print(f"  available LoRAs: {available}")
+            print("  Fix: drop a matching .safetensors into models/loras, or drop --lora "
+                  "to use the first one found.")
             return 2
         lora_name = matches[0]
     else:
         lora_name = loras[0] if loras else None
     print(f"checkpoint: {ckpt_name}\nlora:       {lora_name or '(none found)'}")
 
-    import nodes  # noqa: E402
-    from smoke_trust.capsule.measurement import SoftwareMeasurementSigner  # noqa: E402
-    from smoke_covenant import (  # noqa: E402
-        AssetStore, CovenantInvalid, Grant, HermeticGate,
-        issue, prove_ingredient, verify, verify_ingredient,
-    )
-    from smoke_covenant.policies import LICENCE_TERMS, media_licence_policy  # noqa: E402
-    from smoke_covenant.adapters.comfy import ComfyGateRefusal, covenant_gate  # noqa: E402
+    try:
+        import nodes  # noqa: E402
+        from smoke_covenant._vendor.signer import DemoSigner  # noqa: E402
+        from smoke_covenant import (  # noqa: E402
+            AssetStore, CovenantInvalid, Grant, HermeticGate,
+            issue, prove_ingredient, verify, verify_ingredient,
+        )
+        from smoke_covenant.policies import LICENCE_TERMS, media_licence_policy  # noqa: E402
+        from smoke_covenant.adapters.comfy import ComfyGateRefusal, covenant_gate  # noqa: E402
+    except ModuleNotFoundError as exc:
+        # cryptography is smoke_covenant's own hard dependency and needs an
+        # install; everything else this block imports (nodes.py, and whatever
+        # nodes.py itself pulls in -- torch, safetensors, ...) only exists in
+        # ComfyUI's OWN venv, so any other missing module here means "wrong
+        # interpreter", not "missing dependency". Name whichever it is instead
+        # of leaving a bare traceback three frames into ComfyUI's nodes.py.
+        if exc.name == "cryptography":
+            missing_dependency(
+                exc,
+                what="'cryptography' is not installed on this interpreter "
+                     "(smoke_covenant's only hard dependency)",
+                remedy=f'"{sys.executable}" -m pip install cryptography',
+            )
+        missing_dependency(
+            exc,
+            what=f"{exc.name!r} is not importable on this interpreter ({sys.executable}) "
+                 "-- this script must run under ComfyUI's OWN venv python (it imports "
+                 "ComfyUI's nodes.py, which pulls in torch, safetensors, and friends), "
+                 "not a bare 'python'",
+            remedy=f'"{COMFY}/.venv/Scripts/python.exe" {script_prefix()}render_covenant_demo.py '
+                   "  (adjust the path to your ComfyUI venv's python)",
+        )
 
     # --- register what the studio has cleared -------------------------------
     # Real licences, transcribed by a human from the published texts. The point of
@@ -131,7 +169,7 @@ def main() -> int:
            "commercial": not args.non_commercial,
            "intended_uses": ["advertising"]}
     gate = HermeticGate(store, media_licence_policy(), ctx)
-    signer = SoftwareMeasurementSigner()
+    signer = DemoSigner()
     print(f"purpose:    {'INTERNAL / non-commercial' if args.non_commercial else 'COMMERCIAL (paid advertisement)'}")
     for name in filter(None, (ckpt_name, lora_name)):
         t = licence_for(name)
@@ -176,7 +214,7 @@ def main() -> int:
 
     tsa_clients = []
     if not args.no_anchor:
-        from smoke_trust.audit.anchor import (
+        from smoke_covenant._vendor.tsa import (
             DEFAULT_COMMERCIAL_TSA_URL, DEFAULT_SIGSTORE_TSA_URL, TSAClient)
         tsa_clients = [TSAClient(DEFAULT_COMMERCIAL_TSA_URL),
                        TSAClient(DEFAULT_SIGSTORE_TSA_URL)]

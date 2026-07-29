@@ -22,7 +22,7 @@ test_anchor.py's job; this test only proves the anchor BLOCK survives the
 container unchanged and stays bound to the signature.
 
 Run:
-  "C:/Users/topdy/Smoke(new)/smoke-suite/.venv/Scripts/python.exe" covenant/test_c2pa.py
+  python covenant/test_c2pa.py
 """
 
 from __future__ import annotations
@@ -35,12 +35,15 @@ from pathlib import Path
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-HERE = Path(__file__).resolve().parent
-SUITE = HERE.parents[0]
-for p in (SUITE / "trust", SUITE / "sdks" / "agent" / "python", HERE):
-    sys.path.insert(0, str(p))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _paths import bootstrap_suite  # noqa: E402
 
-from smoke_trust.capsule.measurement import SoftwareMeasurementSigner  # noqa: E402
+# The signer used to build the covenant under test is the vendored DemoSigner
+# (smoke_covenant/_vendor/signer.py), so this script needs no smoke-suite
+# checkout.
+bootstrap_suite(need_suite=False)
+
+from smoke_covenant._vendor.signer import DemoSigner  # noqa: E402
 
 from smoke_covenant import (  # noqa: E402
     AssetStore, CovenantInvalid, Grant, HermeticGate, issue,
@@ -109,7 +112,7 @@ def build(tmp: Path):
     gate.admit(photo, "photograph")
     gate.admit(ckpt, "checkpoint")
 
-    signer = SoftwareMeasurementSigner()
+    signer = DemoSigner()
     cov, ings = issue(gate, str(master), signer=signer,
                       renderer_identity={"engine": "ComfyUI", "sampler": "euler"},
                       tsa_clients=[_OfflineTSA()])

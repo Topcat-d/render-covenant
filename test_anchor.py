@@ -7,7 +7,7 @@ contradicted the whole pitch line ("bound at a time it did not choose").
 
 Offline by default. Pass --live to hit the real DigiCert and Sigstore TSAs.
 
-  "C:/Users/topdy/ComfyUI/.venv/Scripts/python.exe" covenant/test_anchor.py [--live]
+  python covenant/test_anchor.py [--live]
 """
 
 from __future__ import annotations
@@ -19,12 +19,16 @@ from pathlib import Path
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-HERE = Path(__file__).resolve().parent
-SUITE = HERE.parents[0]
-for p in (SUITE / "trust", SUITE / "sdks" / "agent" / "python", HERE):
-    sys.path.insert(0, str(p))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _paths import bootstrap_suite  # noqa: E402
 
-from smoke_trust.capsule.measurement import SoftwareMeasurementSigner  # noqa: E402
+# Anchoring IS the thing under test, but both the signer and the RFC 3161
+# client below are the vendored copies (smoke_covenant/_vendor/signer.py,
+# smoke_covenant/_vendor/tsa.py), so this script -- including --live, which
+# hits the real DigiCert and Sigstore TSAs -- needs no smoke-suite checkout.
+bootstrap_suite(need_suite=False)
+
+from smoke_covenant._vendor.signer import DemoSigner  # noqa: E402
 
 from smoke_covenant import (  # noqa: E402
     AssetStore, CovenantInvalid, Grant, HermeticGate, issue, verify,
@@ -54,7 +58,7 @@ def build(tmp: Path, tsa_clients=()):
            "commercial": True, "intended_uses": ["advertising"]}
     gate = HermeticGate(store, media_licence_policy(), ctx)
     gate.admit(asset, "photograph")
-    signer = SoftwareMeasurementSigner()
+    signer = DemoSigner()
     cov, ings = issue(gate, str(master), signer=signer,
                       renderer_identity={"engine": "test"}, tsa_clients=tsa_clients)
     return cov, ings, master, signer
@@ -94,7 +98,7 @@ def main() -> int:
 
     # 4. live TSAs
     if live:
-        from smoke_trust.audit.anchor import (
+        from smoke_covenant._vendor.tsa import (
             DEFAULT_COMMERCIAL_TSA_URL, DEFAULT_SIGSTORE_TSA_URL, TSAClient,
         )
         clients = [TSAClient(DEFAULT_COMMERCIAL_TSA_URL),
