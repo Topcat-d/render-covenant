@@ -77,6 +77,29 @@ SPEC GROUNDING — what was checked, where, and when (all fetched 2026-07-27):
       `manifest_data`, `validation_status`, `data`, `description`,
       `informational_uri`, `metadata`, `active_manifest`.
       https://docs.rs/c2pa/latest/c2pa/struct.Ingredient.html
+  [7] REDACTION, and the absence of a set commitment (re-checked 2026-07-30
+      against C2PA 2.4, because "C2PA already does this via redaction" is the
+      first objection any informed reader raises to the block below):
+        - Sec 6.8 "Redaction of Assertions": assertions "may be removed from
+          that asset's manifest when the asset is used as an ingredient", and
+          "a record that something was removed shall be added to the claim in
+          the form of a URI reference to the redacted assertion in the
+          `redacted_assertions` field of the claim."
+        - Sec 6.8 note: "Because each assertion's URI reference includes the
+          assertion label, it is also known what type of information (e.g.,
+          thumbnail, metadata, etc.) was removed."
+        - Claims "cannot be modified once made as part of a claim", and
+          `signature` is mandatory in claim-map-v2 (Sec 10.2.1) — so redacting
+          means minting and signing a NEW claim.
+        - Sec 6.6 "Assertion Store": each assertion "should include a
+          randomly-generated salt ... so that subsequent generators can redact
+          assertions securely."
+        - Merkle trees DO appear, but only for BMFF byte-range hashing — "one
+          Merkle tree is used for each `'mdat'` box" / "for each track"
+          (Appendix A.5.4.1), for partial validation of one media file. A
+          full-text search for "inclusion proof", "set commitment" and
+          "accumulator" returns nothing.
+      https://spec.c2pa.org/specifications/specifications/2.4/specs/C2PA_Specification.html
 
 Only the CUSTOM ASSERTION is fully spec-grounded and fully under our control.
 Everything outside `data` is somebody else's schema, is marked UNVERIFIED where
@@ -143,6 +166,39 @@ NOT_ASSERTED = (
 #                 of one, the other four stay sealed". This is the largest
 #                 genuine gap and it is why the covenant is not redundant with
 #                 an ingredient list.
+#
+#                 REDACTION IS NOT THE SAME THING, and this was re-verified
+#                 against C2PA 2.4 rather than assumed [7]. C2PA CAN remove an
+#                 assertion and still validate, which looks equivalent and is
+#                 not, on three axes:
+#                   - WHO. Redaction is done by a claim generator minting a NEW
+#                     signed claim. A holder without a signing key cannot
+#                     produce a redacted variant at all. A Merkle proof needs no
+#                     key and no new signature.
+#                   - HOW MANY TIMES. Showing verifier A ingredient 2 and
+#                     verifier B ingredient 4 needs two separately signed
+#                     manifests. One published covenant answers both, and any
+#                     later question, from the root it already committed to.
+#                   - WHAT LEAKS. `redacted_assertions` entries carry the
+#                     assertion LABEL, so a redacted manifest advertises how
+#                     many things were removed and what kind each was. A
+#                     sibling hash in an inclusion path carries no label.
+#                 C2PA's redaction is an authorization mechanism -- a signed,
+#                 deliberately legible statement that somebody struck something.
+#                 The covenant's root is a commitment. Different constructions,
+#                 different properties; neither replaces the other.
+#
+#                 HONEST LIMIT, and C2PA is ahead of us here. Our leaves are
+#                 SHA256(domain || canonical_json(record)) with NO SALT, and an
+#                 ingredient record is low-entropy -- a verifier holding one
+#                 disclosure can brute-force a sealed sibling by hashing
+#                 candidate filenames and grant IDs. C2PA salts assertions for
+#                 exactly this reason ("so that subsequent generators can redact
+#                 assertions securely", Sec 6.6 [7]). Sealed here therefore means
+#                 "not enumerated", NOT "computationally hidden from a
+#                 determined guesser". Fixing it means a per-leaf salt carried in
+#                 the disclosure, which changes leaf computation and so is a
+#                 format break -- deferred to a v1, not silently patched.
 #   the gate decision itself
 #                 there is no C2PA field meaning "a policy was enforced here".
 #                 That is the whole reason for the custom assertion.

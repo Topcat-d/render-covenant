@@ -33,8 +33,11 @@ logged and rendered anyway.
 - **Trusted timestamping (RFC 3161).** Optional anchoring against independent
   timestamp authorities (DigiCert, Sigstore). Unanchored covenants fail closed
   by default, because an unanchored issue time is only the signer's own word.
-- **Selective disclosure.** Prove one licensed ingredient was an input while
-  keeping the rest of the ingredient list sealed.
+- **Selective disclosure.** Prove one licensed ingredient was an input, from a
+  single published commitment, with no signing key and no re-issuing — while the
+  rest of the ingredient list stays unenumerated. (Unenumerated, not
+  computationally hidden: leaves are currently unsalted, so a determined guesser
+  can test candidates. See the limit noted in `smoke_covenant/c2pa.py`.)
 - **C2PA emission.** Export the decision as a C2PA-shaped assertion for
   content-credentials pipelines.
 - **Offline verification.** A distributor verifies with the covenant JSON, the
