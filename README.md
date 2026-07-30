@@ -5,6 +5,7 @@ Python library that binds every Stable Diffusion / SDXL render to the licensed
 assets it actually loaded, and refuses to render when a licence does not
 permit it.**
 
+[![CI](https://github.com/Topcat-d/render-covenant/actions/workflows/ci.yml/badge.svg)](https://github.com/Topcat-d/render-covenant/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 

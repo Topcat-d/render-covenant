@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.12", "3.13"]
+    runs-on: ${{ matrix.os }}
+    env:
+      # A couple of test scripts print non-ASCII characters (em dashes, etc.);
+      # force UTF-8 so Windows runners on the default locale codepage don't
+      # crash with a UnicodeEncodeError instead of an honest test failure.
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install smoke_covenant (editable)
+        run: python -m pip install -e .
+
+      - name: Preflight doctor (verifies the install is sane)
+        shell: bash
+        run: python doctor.py
+
+      # smoke_covenant's own test suite is nine top-level test_*.py scripts,
+      # each independently runnable (`python test_X.py`, exit 0 on pass) --
+      # there is no pytest.ini/conftest.py because this repo is not meant to
+      # be collected by pytest. Four of the nine need only this package's one
+      # dependency (cryptography) and run anywhere:
+      #
+      #   test_standalone.py, test_toctou.py, test_anchor.py, test_c2pa.py
+      #
+      # The other five are out of scope for this CI:
+      #   - test_comfy_adapter.py, test_comfy_node.py, test_large_asset.py,
+      #     test_embedding_gap.py -- all require a real ComfyUI checkout
+      #     (`_paths.bootstrap_comfy()` calls `resolve_comfyui_root()`, which
+      #     raises SystemExit if none is found -- there is no graceful
+      #     fallback, by design: see _paths.py). test_embedding_gap.py also
+      #     needs torch + safetensors, which this repo deliberately does not
+      #     pin (ComfyUI supplies its own CUDA-matched torch).
+      #   - test_vendor_conformance.py requires the private smoke-suite
+      #     monorepo (`smoke_trust`) and SKIPs cleanly (exit 0) without it,
+      #     so it is harmless to run but adds no coverage here -- left out
+      #     to keep this list honest about what CI actually verifies.
+      #
+      # See QUICKSTART.md and comfy_node/README.md for how to exercise the
+      # ComfyUI-dependent paths locally, against a real ComfyUI install.
+      - name: Run standalone tests
+        # bash (git-bash on windows-latest, native on ubuntu-latest) so a
+        # nonzero exit from any line fails the step the same way on both
+        # OSes -- pwsh's default run-block doesn't reliably fail-fast on a
+        # native command's exit code the way bash's `set -eo pipefail` does.
+        shell: bash
+        run: |
+          python test_standalone.py
+          python test_toctou.py
+          python test_anchor.py
+          python test_c2pa.py
