@@ -63,10 +63,15 @@ where you would normally put Save Image. It writes the master PNG itself — see
 
 The only thing a smoke-suite checkout changes is **which class wraps an
 operator-supplied signing key** — cosmetic, not behavioural: smoke_trust's
-`SoftwareMeasurementSigner` if the suite is found, the vendored `DemoSigner`
-if not, both signing identically over the same configured key. Everything
-else — the gate, the policy, staging, anchoring, C2PA, refusal semantics — is
-identical either way.
+`SoftwareMeasurementSigner` if the suite is found, the vendored
+`LocalKeySigner` if not, both signing identically (P-256, prehashed ECDSA)
+over the same configured key. Everything else — the gate, the policy, staging,
+anchoring, C2PA, refusal semantics — is identical either way.
+
+`LocalKeySigner` **requires** a key and has no key-generating path, so the
+standalone fallback can never quietly turn your configured key into an
+unpinnable one. The demo-branded `DemoSigner` is a separate class that exists
+only to mint an ephemeral key, and it is never used to wrap a key you supplied.
 
 **The one case that actually differs is having NO `signing_key_pem`
 configured at all.** Then the node falls back to `DemoSigner()` generating a
@@ -276,7 +281,7 @@ Everything that routes through, **on the thread ComfyUI executes the prompt on**
 ## Testing
 
 ```
-"$COMFYUI_ROOT/.venv/Scripts/python.exe" covenant/test_comfy_node.py
+"$COMFYUI_ROOT/.venv/Scripts/python.exe" test_comfy_node.py
 ```
 
 ComfyUI is auto-detected if not set (see `covenant/_paths.py`): common sibling

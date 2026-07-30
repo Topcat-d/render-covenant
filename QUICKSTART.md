@@ -12,9 +12,10 @@ Two independent tracks:
   signed covenant over a real PNG. Needs ComfyUI, an SDXL checkpoint (~6.5 GiB)
   and two small LoRAs.
 
-Every command below is written with forward slashes (`C:/Users/...`) so it can
-be pasted as-is into **either PowerShell or Git Bash**. Swap in your own paths
-where this file's are specific to one machine.
+Commands below are written relative to the root of your checkout, with forward
+slashes throughout so the Windows forms paste as-is into **either PowerShell or
+Git Bash**. Where a path points outside this repo (a ComfyUI checkout, a model
+file), substitute your own.
 
 Optional but recommended, before either track: run the built-in preflight
 check. It is stdlib-only (nothing to install first) and tells you exactly
@@ -22,7 +23,7 @@ what's missing and the exact command to fix it, ending in a VERDICT of which
 demos are runnable right now:
 
 ```
-python covenant/doctor.py
+python doctor.py
 ```
 
 ---
@@ -38,20 +39,26 @@ byte strings instead of real media.
 
 ### Prerequisite
 
-Python **3.11+** on your PATH. (This matches the floor the sibling package
-`trust/pyproject.toml` already declares in this monorepo; it has not been
-independently tested below that. Verified in this pass on Python 3.12.13.)
+Python **3.11+** on your PATH. It has not been independently tested below that.
+Verified in this pass on Python 3.12.13.
 
 ### Run it
 
-```
-python -m venv "C:/Users/topdy/smoke-demo-hardening/.venv"
-"C:/Users/topdy/smoke-demo-hardening/.venv/Scripts/python.exe" -m pip install cryptography
-"C:/Users/topdy/smoke-demo-hardening/.venv/Scripts/python.exe" "C:/Users/topdy/smoke-demo-hardening/covenant/demo_covenant.py"
+From the root of your checkout:
+
+```sh
+# Linux / macOS
+python -m venv .venv
+./.venv/bin/python -m pip install cryptography
+./.venv/bin/python demo_covenant.py
 ```
 
-(Swap `C:/Users/topdy/smoke-demo-hardening` for wherever you actually checked
-this repo out.)
+```sh
+# Windows (Git Bash or PowerShell)
+python -m venv .venv
+./.venv/Scripts/python.exe -m pip install cryptography
+./.venv/Scripts/python.exe demo_covenant.py
+```
 
 **This was run for real while writing this document**, using a brand-new
 virtual environment with only `cryptography` installed and nothing else on
@@ -202,7 +209,7 @@ signed covenant over a real PNG that a third party can verify offline.
    "$COMFYUI_ROOT/.venv/Scripts/python.exe" -m pip install cryptography
    ```
    (ComfyUI does not install `cryptography` for its own purposes; check with
-   `covenant/doctor.py` rather than assuming either way.)
+   `doctor.py` rather than assuming either way.)
 3. **One SDXL base checkpoint and two specific LoRAs** — see below for exactly
    why these two and not any two.
 4. **`COMFYUI_ROOT`**, only if ComfyUI is not already found automatically.
@@ -216,7 +223,7 @@ signed covenant over a real PNG that a third party can verify offline.
    $env:COMFYUI_ROOT = "D:/apps/ComfyUI"
    ```
 
-Run `python covenant/doctor.py` after installing cryptography into ComfyUI's
+Run `python doctor.py` after installing cryptography into ComfyUI's
 venv — it checks all of the above (plus the two model files, network
 reachability of the timestamp authorities, and free disk space) and prints
 the exact command to run next.
@@ -255,9 +262,9 @@ extended once real licences were registered against it.
 ### The three cases
 
 ```
-"$COMFYUI_ROOT/.venv/Scripts/python.exe" covenant/render_covenant_demo.py --lora dmd2
-"$COMFYUI_ROOT/.venv/Scripts/python.exe" covenant/render_covenant_demo.py --lora pixel-art
-"$COMFYUI_ROOT/.venv/Scripts/python.exe" covenant/render_covenant_demo.py --lora dmd2 --non-commercial
+"$COMFYUI_ROOT/.venv/Scripts/python.exe" render_covenant_demo.py --lora dmd2
+"$COMFYUI_ROOT/.venv/Scripts/python.exe" render_covenant_demo.py --lora pixel-art
+"$COMFYUI_ROOT/.venv/Scripts/python.exe" render_covenant_demo.py --lora dmd2 --non-commercial
 ```
 
 - **Case A** (`--lora dmd2`) — a paid advertisement using the CC-BY-NC LoRA.

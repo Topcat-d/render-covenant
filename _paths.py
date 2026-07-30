@@ -1,9 +1,9 @@
 """Shared path resolution for the Render Covenant demo and tests.
 
-Every script in this directory used to hardcode the author's own machine --
-`C:/Users/topdy/ComfyUI`, `C:/Users/topdy/Smoke(new)/smoke-suite/.venv` -- which
-meant nothing here ran for anyone who cloned the repo somewhere else. This
-module centralizes the two lookups that mattered:
+Every script in this directory used to hardcode absolute paths from the
+author's own machine -- a ComfyUI checkout and a virtualenv, both under a home
+directory nobody else has -- which meant nothing here ran for anyone who cloned
+the repo somewhere else. This module centralizes the two lookups that mattered:
 
   resolve_comfyui_root()   REQUIRED. Where the scripts that drive a real
                            ComfyUI (render_covenant_demo.py, and the
@@ -95,7 +95,7 @@ def resolve_comfyui_root() -> Path:
         "Could not find a ComfyUI checkout. Looked in:\n"
         f"{looked}\n\n"
         f"Set {COMFYUI_ROOT_ENV} to point at yours, e.g.\n"
-        f'  {COMFYUI_ROOT_ENV}="/path/to/ComfyUI" python covenant/render_covenant_demo.py'
+        f'  {COMFYUI_ROOT_ENV}="/path/to/ComfyUI" python render_covenant_demo.py'
     )
 
 

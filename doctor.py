@@ -4,7 +4,7 @@ ZERO-DEPENDENCY ON PURPOSE: stdlib only, no smoke_covenant import required to
 run this file itself, so it works BEFORE the environment is set up -- that is
 the entire point of a preflight check. Run it first, before anything else:
 
-    python covenant/doctor.py
+    python doctor.py
 
 Checks, each printed as PASS/FAIL with an exact remedy command when it fails:
   1. Python version

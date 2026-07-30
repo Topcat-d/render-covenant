@@ -22,7 +22,7 @@ test_anchor.py's job; this test only proves the anchor BLOCK survives the
 container unchanged and stays bound to the signature.
 
 Run:
-  python covenant/test_c2pa.py
+  python test_c2pa.py
 """
 
 from __future__ import annotations

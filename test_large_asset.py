@@ -11,7 +11,7 @@ depend on the bytes being a real model.
 ComfyUI is auto-detected (see _paths.py); set COMFYUI_ROOT to override.
 
 Run:
-  "$COMFYUI_ROOT/.venv/Scripts/python.exe" covenant/test_large_asset.py [GiB]
+  "$COMFYUI_ROOT/.venv/Scripts/python.exe" test_large_asset.py [GiB]
 """
 
 from __future__ import annotations

@@ -7,7 +7,7 @@ real model. Real weights get exercised by the end-to-end render demo.
 ComfyUI is auto-detected (see _paths.py); set COMFYUI_ROOT to override.
 
 Run:
-  "$COMFYUI_ROOT/.venv/Scripts/python.exe" covenant/test_comfy_adapter.py
+  "$COMFYUI_ROOT/.venv/Scripts/python.exe" test_comfy_adapter.py
 """
 
 from __future__ import annotations

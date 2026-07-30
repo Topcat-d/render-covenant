@@ -13,7 +13,7 @@ decision the packaging makes.
 ComfyUI is auto-detected (see _paths.py); set COMFYUI_ROOT to override.
 
 Run:
-  "$COMFYUI_ROOT/.venv/Scripts/python.exe" covenant/test_comfy_node.py
+  "$COMFYUI_ROOT/.venv/Scripts/python.exe" test_comfy_node.py
 """
 
 from __future__ import annotations
@@ -34,12 +34,28 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _paths import HERE, SUITE_ROOT_ENV, bootstrap_comfy  # noqa: E402
 
 # NOTE: the NODE no longer needs smoke_trust -- it falls back to the vendored
-# DemoSigner/TSAClient and loads standalone (proven separately). This TEST still
-# requires the suite root, deliberately: it exercises the in-tree path including
-# the "second copy adopts the existing provider" case, which resolves
-# smoke_covenant via SMOKE_COVENANT_SUITE. Requiring it here is a property of the
-# test fixture, not of the node.
-COMFY, SUITE = bootstrap_comfy(need_suite=True)
+# LocalKeySigner/DemoSigner and TSAClient and loads standalone (proven
+# separately). This TEST wants the suite root, deliberately: it exercises the
+# in-tree path including the "second copy adopts the existing provider" case,
+# which resolves smoke_covenant via SMOKE_COVENANT_SUITE. That is a property of
+# the test fixture, not of the node.
+#
+# So its absence is a SKIP, not a crash -- same reasoning as
+# test_vendor_conformance.py. In the standalone public repo there IS no suite
+# root, and a test that failed BY CONSTRUCTION for every reader would read as
+# "this project is broken" rather than "this check is in-tree only".
+COMFY, SUITE = bootstrap_comfy(need_suite=False)
+if SUITE is None:
+    print("=" * 72)
+    print("ComfyUI custom-node packaging")
+    print("=" * 72)
+    print("  [SKIP] no smoke-suite checkout found -- this check is in-tree only.")
+    print("         The node itself runs fine standalone (see comfy_node/README.md,")
+    print("         'Standalone vs. in-tree'); this fixture additionally needs a")
+    print("         suite root to exercise the second-installed-copy case. Set")
+    print("         SMOKE_COVENANT_SUITE to a smoke-suite checkout to run it.")
+    print("=" * 72)
+    raise SystemExit(0)
 
 import folder_paths  # noqa: E402  (real ComfyUI)
 

@@ -150,8 +150,9 @@ _LOG.info(
     "Render Covenant: %s (smoke-suite: %s)",
     install(),
     f"found at {SUITE_ROOT}" if SUITE_ROOT is not None
-    else "not found -- standalone mode, signing falls back to the vendored "
-         "DemoSigner when no signing_key_pem is configured",
+    else "not found -- standalone mode, signing uses the vendored "
+         "LocalKeySigner over your configured signing_key_pem, or the "
+         "ephemeral DemoSigner if no key is configured",
 )
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "SUITE_ROOT"]

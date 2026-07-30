@@ -18,7 +18,7 @@ importable. Randomized inputs, not a handful of fixtures, because the interestin
 divergences hide in odd shapes: odd leaf counts (the promote path), unicode keys,
 nested containers, large integers.
 
-  python covenant/test_vendor_conformance.py
+  python test_vendor_conformance.py
 """
 
 from __future__ import annotations

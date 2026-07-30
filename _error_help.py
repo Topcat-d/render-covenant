@@ -13,7 +13,7 @@ uncaught exception would have done) and still prints the original exception
 text -- it only adds a plain-English "what broke" line and a "how to fix it"
 line ahead of it.
 
-See covenant/doctor.py for the full preflight check this grew out of: run
+See doctor.py for the full preflight check this grew out of: run
 that first and most of these should never fire.
 """
 

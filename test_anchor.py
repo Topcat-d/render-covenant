@@ -7,7 +7,7 @@ contradicted the whole pitch line ("bound at a time it did not choose").
 
 Offline by default. Pass --live to hit the real DigiCert and Sigstore TSAs.
 
-  python covenant/test_anchor.py [--live]
+  python test_anchor.py [--live]
 """
 
 from __future__ import annotations

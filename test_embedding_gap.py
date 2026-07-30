@@ -9,7 +9,7 @@ unlicensed asset had in fact participated.
 ComfyUI is auto-detected (see _paths.py); set COMFYUI_ROOT to override.
 
 Run (no checkpoint needed -- this exercises load_embed directly):
-  "$COMFYUI_ROOT/.venv/Scripts/python.exe" covenant/test_embedding_gap.py
+  "$COMFYUI_ROOT/.venv/Scripts/python.exe" test_embedding_gap.py
 """
 
 from __future__ import annotations

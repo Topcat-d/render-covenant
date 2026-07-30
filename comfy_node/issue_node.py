@@ -219,11 +219,12 @@ def _build_signer(cfg) -> tuple[object, bool]:
 
     The wrapper class for a CONFIGURED key prefers smoke_trust's
     SoftwareMeasurementSigner when the suite is present (unchanged behaviour
-    for an in-tree install) and falls back to the vendored DemoSigner
-    otherwise -- it satisfies the identical sign()/public_key() protocol over
-    a supplied key, so the signature this produces is the same either way.
-    Preferring smoke_trust here is a nicety, not a requirement: this node must
-    work fully without it.
+    for an in-tree install) and falls back to the vendored LocalKeySigner
+    otherwise -- NOT to DemoSigner, which is demo-branded precisely because it
+    mints its own unpinnable key. LocalKeySigner satisfies the identical
+    sign()/public_key() protocol over the operator's supplied key, so the
+    signature this produces is the same either way. Preferring smoke_trust
+    here is a nicety, not a requirement: this node must work fully without it.
     """
     if cfg.signing_key_pem is not None:
         from cryptography.hazmat.primitives.serialization import load_pem_private_key
@@ -239,16 +240,19 @@ def _build_signer(cfg) -> tuple[object, bool]:
 def _keyed_signer_class():
     """The class that wraps an operator-supplied signing key. Prefers
     smoke_trust's SoftwareMeasurementSigner when importable (identical
-    in-tree behaviour); otherwise the vendored DemoSigner, which exists
-    precisely to satisfy this same protocol standalone -- see its docstring."""
+    in-tree behaviour); otherwise the vendored LocalKeySigner, which exists
+    precisely to satisfy this same protocol standalone over a key the operator
+    supplied -- see its docstring. Deliberately NOT DemoSigner: that class is
+    demo-branded because it generates its own ephemeral key, and a real
+    signing key must never be wrapped in it."""
     try:
         from smoke_trust.capsule.measurement import SoftwareMeasurementSigner
 
         return SoftwareMeasurementSigner
     except Exception:  # noqa: BLE001 - absence is the whole standalone point
-        from smoke_covenant._vendor.signer import DemoSigner
+        from smoke_covenant._vendor.signer import LocalKeySigner
 
-        return DemoSigner
+        return LocalKeySigner
 
 
 def _tsa_clients(cfg):

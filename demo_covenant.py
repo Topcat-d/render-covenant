@@ -7,7 +7,7 @@ one screen:
       -> disclose ONE ingredient -> swap in an unlicensed LoRA -> FAIL CLOSED
       -> flip one byte of the master -> covenant no longer applies
 
-Run:  python covenant/demo_covenant.py
+Run:  python demo_covenant.py
 """
 
 from __future__ import annotations

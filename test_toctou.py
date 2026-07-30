@@ -15,7 +15,7 @@ This test needs neither ComfyUI nor smoke_trust -- only smoke_covenant's own
 gate -- so it runs anywhere with this package's dependencies installed.
 
 Run:
-  python covenant/test_toctou.py
+  python test_toctou.py
 """
 
 from __future__ import annotations

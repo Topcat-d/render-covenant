@@ -9,7 +9,7 @@ Needs models. Put at least one checkpoint in ComfyUI/models/checkpoints and
 
 ComfyUI is auto-detected (see _paths.py); set COMFYUI_ROOT to override.
 
-  "$COMFYUI_ROOT/.venv/Scripts/python.exe" covenant/render_covenant_demo.py
+  "$COMFYUI_ROOT/.venv/Scripts/python.exe" render_covenant_demo.py
   ... --lora dmd2            CC-BY-NC-4.0 in a paid ad -> BLOCKED on a real load
   ... --lora dmd2 --non-commercial   same asset, internal use -> admitted
   ... --lora pixel           OpenRAIL-M -> renders, covenant issued

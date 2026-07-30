@@ -12,7 +12,7 @@ root that differs by one byte produces covenants nobody else can verify. That is
 the worst possible failure for this package: it would not error, it would quietly
 emit unverifiable evidence.
 
-So `covenant/test_vendor_conformance.py` asserts BYTE-FOR-BYTE agreement between
+So `test_vendor_conformance.py` asserts BYTE-FOR-BYTE agreement between
 everything here and the smoke_trust originals, across randomized inputs, and is
 run in-tree where both are present. If this file ever drifts, that test fails
 before anything ships.

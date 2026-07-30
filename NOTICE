@@ -36,13 +36,15 @@ recorded here because a reader of the file alone cannot tell that.
   agreement with the originals is asserted by randomized differential
   testing in `test_vendor_conformance.py`.
 
-- `signer.py` and `tsa.py` — demo/standalone equivalents of
-  `smoke_trust`'s `SoftwareMeasurementSigner` and
-  `smoke_trust.audit.anchor.TSAClient`, respectively: mechanically identical
-  in behaviour (same signing scheme, same RFC 3161 client defaults) but
-  written independently for this package so it does not hard-depend on a
-  `smoke-suite` checkout. Not byte-for-byte copies and not covered by the
-  conformance check above.
+- `signer.py` and `tsa.py` — standalone equivalents of `smoke_trust`'s
+  `SoftwareMeasurementSigner` and `smoke_trust.audit.anchor.TSAClient`,
+  respectively: mechanically identical in behaviour (same signing scheme,
+  same RFC 3161 client defaults) but written independently for this package
+  so it does not hard-depend on a `smoke-suite` checkout. Not byte-for-byte
+  copies and not covered by the conformance check above. `signer.py` carries
+  two classes: `LocalKeySigner`, which requires a caller-supplied key and is
+  the standalone equivalent used for real signing, and `DemoSigner`, which
+  mints an ephemeral key and is for demos and tests only.
 
 ================================================================================
 THIRD-PARTY SOFTWARE
