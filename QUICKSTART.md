@@ -26,6 +26,10 @@ demos are runnable right now:
 python doctor.py
 ```
 
+This document walks the demos; for the automated test suite (`python -m
+pytest -q`, or each `test_*.py` runnable directly) see the **Tests** section
+of [`README.md`](README.md#tests).
+
 ---
 
 ## Track 1 — see it work in 60 seconds

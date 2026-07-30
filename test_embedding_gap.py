@@ -21,13 +21,36 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _paths import bootstrap_comfy  # noqa: E402
+from _paths import bootstrap_comfy, find_comfyui_root, skip_or_die  # noqa: E402
+
+# See test_comfy_adapter.py for why this probe exists: standalone stays
+# fail-closed via bootstrap_comfy()'s own SystemExit; pytest gets a clean
+# module-level skip instead of a collection crash.
+if find_comfyui_root() is None and "pytest" in sys.modules:
+    skip_or_die(
+        "no ComfyUI checkout found (see _paths.py) -- set COMFYUI_ROOT to "
+        "run this test against a real ComfyUI install",
+        exit_code=1,
+    )
 
 COMFY, SUITE = bootstrap_comfy()
 
 import folder_paths  # noqa: E402
-import torch  # noqa: E402
-from safetensors.torch import save_file  # noqa: E402
+
+# torch + safetensors are NOT part of this repo's own dependencies (ComfyUI
+# supplies its own CUDA-matched torch; see pyproject.toml's `comfy` extra) --
+# only ComfyUI's own venv is guaranteed to have them. Standalone keeps the
+# plain ImportError/traceback it always had; under pytest that would be an
+# ERROR rather than a SKIP, which misrepresents an environment gap as a
+# failure, so route it through the same skip path as the ComfyUI probe.
+try:
+    import torch  # noqa: E402
+    from safetensors.torch import save_file  # noqa: E402
+except ImportError as exc:
+    if "pytest" in sys.modules:
+        skip_or_die(f"torch/safetensors not available in this environment: {exc}",
+                     exit_code=1)
+    raise
 
 from smoke_covenant import AssetStore, Grant, HermeticGate  # noqa: E402
 from smoke_covenant.adapters.comfy import ComfyGateRefusal, covenant_gate  # noqa: E402
@@ -135,6 +158,22 @@ def main() -> int:
         return 1
     print("Embedding gap CLOSED. Mirror drift fails closed (see _EmbedHook).")
     return 0
+
+
+def test_main():
+    # See test_comfy_adapter.py's test_main(): main() imports real ComfyUI's
+    # comfy.sd1_clip directly, which needs ComfyUI's own heavy deps (e.g.
+    # transformers) -- not this test venv's, even once torch/safetensors
+    # (guarded above) are present. An environment gap, not a real failure.
+    try:
+        result = main()
+    except ImportError as exc:
+        import pytest
+        pytest.skip(
+            f"a ComfyUI-side dependency is unavailable in this environment "
+            f"(run with ComfyUI's own venv instead): {exc}"
+        )
+    assert result == 0
 
 
 if __name__ == "__main__":

@@ -60,6 +60,30 @@ def _comfyui_candidates() -> list[Path]:
     ]
 
 
+def find_comfyui_root() -> Path | None:
+    """Non-raising probe: the exact same search as `resolve_comfyui_root()`
+    (same order, same env var, same `_looks_like_comfyui` check), but
+    returns None instead of raising when nothing is found.
+
+    For callers that need to know WHETHER a ComfyUI checkout exists before
+    deciding what to do about it -- e.g. a pytest-mode guard that wants to
+    skip cleanly instead of letting `resolve_comfyui_root()`'s SystemExit
+    escape module import. Scripts that just need ComfyUI or a clear fatal
+    error should keep calling `resolve_comfyui_root()` / `bootstrap_comfy()`
+    directly; this probe never raises, so it must not be used anywhere the
+    fail-closed standalone behaviour is expected.
+    """
+    override = os.environ.get(COMFYUI_ROOT_ENV)
+    if override:
+        candidate = Path(override).expanduser()
+        return candidate.resolve() if _looks_like_comfyui(candidate) else None
+
+    for candidate in _comfyui_candidates():
+        if _looks_like_comfyui(candidate):
+            return candidate.resolve()
+    return None
+
+
 def resolve_comfyui_root() -> Path:
     """Find a real ComfyUI checkout.
 
@@ -73,11 +97,13 @@ def resolve_comfyui_root() -> Path:
     change what the gate is being tested against, so there is no fallback
     worth guessing at.
     """
+    root = find_comfyui_root()
+    if root is not None:
+        return root
+
     override = os.environ.get(COMFYUI_ROOT_ENV)
     if override:
         candidate = Path(override).expanduser()
-        if _looks_like_comfyui(candidate):
-            return candidate.resolve()
         raise SystemExit(
             f"{COMFYUI_ROOT_ENV}={override!r} does not look like a ComfyUI checkout "
             f"(expected to find {candidate / 'folder_paths.py'}).\n"
@@ -86,10 +112,6 @@ def resolve_comfyui_root() -> Path:
         )
 
     candidates = _comfyui_candidates()
-    for candidate in candidates:
-        if _looks_like_comfyui(candidate):
-            return candidate.resolve()
-
     looked = "\n".join(f"  - {c}" for c in candidates)
     raise SystemExit(
         "Could not find a ComfyUI checkout. Looked in:\n"
@@ -154,6 +176,43 @@ def require_suite_root(reason: str) -> Path:
     raise SystemExit(
         f"{reason}\n{detail}.\nSet {SUITE_ROOT_ENV}=/path/to/smoke-suite to point at one."
     )
+
+
+# --- pytest / standalone dual-mode stops ---------------------------------------
+
+
+def skip_or_die(reason: str, *, exit_code: int = 0) -> None:
+    """Turn a "this test cannot run here" condition into the right kind of
+    stop for whichever runner is in charge.
+
+    Standalone (`python test_X.py`): this repo's tests are deliberately
+    fail-closed on a missing dependency (see the module docstring) -- raises
+    SystemExit(exit_code), exactly as every test script already did before
+    pytest support existed. Callers are expected to have already printed
+    their own existing-style `[SKIP]` banner (see test_vendor_conformance.py
+    / test_comfy_node.py) before calling this, so standalone output is
+    unchanged byte-for-byte; this does not print anything of its own, to
+    avoid tacking a redundant line onto that banner.
+
+    Under pytest (`"pytest" in sys.modules`): a module-level SystemExit is a
+    BaseException that escapes pytest's collector and crashes the whole run
+    with an INTERNALERROR instead of being reported as a normal result. So
+    under pytest this calls `pytest.skip(reason, allow_module_level=True)`
+    instead, which pytest reports as an honest skip -- `reason` is what
+    shows up in pytest's output, so make it a short, self-contained sentence
+    even when the caller's own banner is more elaborate.
+
+    Not a fit for `resolve_comfyui_root()`'s own SystemExit, which already
+    carries a more detailed, established message of its own -- callers
+    should let that one raise on its own and only use `skip_or_die` to
+    short-circuit into a pytest skip *before* calling it (see the
+    ComfyUI-dependent test files).
+    """
+    if "pytest" in sys.modules:
+        import pytest
+
+        pytest.skip(reason, allow_module_level=True)
+    raise SystemExit(exit_code)
 
 
 # --- sys.path wiring ------------------------------------------------------------

@@ -32,7 +32,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _paths import HERE, bootstrap_suite  # noqa: E402
+from _paths import HERE, bootstrap_suite, skip_or_die  # noqa: E402
 
 # Do NOT require a suite root here: its absence means "this is the standalone
 # public repo", which is a SKIP, not a crash.
@@ -47,7 +47,8 @@ if SUITE is None:
     print("         from are importable. Set SMOKE_COVENANT_SUITE to point at a")
     print("         smoke-suite checkout to run it for real.")
     print("=" * 74)
-    raise SystemExit(0)
+    skip_or_die("no smoke-suite checkout found -- smoke_trust is unavailable "
+                "(set SMOKE_COVENANT_SUITE to run this in-tree check)", exit_code=0)
 
 # originals
 from smoke_trust.attestation.windowed import (  # noqa: E402
@@ -162,6 +163,10 @@ def main() -> int:
         return 1
     print("Vendored primitives conform. Extraction is safe.")
     return 0
+
+
+def test_main():
+    assert main() == 0
 
 
 if __name__ == "__main__":

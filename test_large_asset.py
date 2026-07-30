@@ -25,7 +25,17 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _paths import bootstrap_comfy  # noqa: E402
+from _paths import bootstrap_comfy, find_comfyui_root, skip_or_die  # noqa: E402
+
+# See test_comfy_adapter.py for why this probe exists: standalone stays
+# fail-closed via bootstrap_comfy()'s own SystemExit; pytest gets a clean
+# module-level skip instead of a collection crash.
+if find_comfyui_root() is None and "pytest" in sys.modules:
+    skip_or_die(
+        "no ComfyUI checkout found (see _paths.py) -- set COMFYUI_ROOT to "
+        "run this test against a real ComfyUI install",
+        exit_code=1,
+    )
 
 COMFY, SUITE = bootstrap_comfy()
 
@@ -109,6 +119,30 @@ def main() -> int:
     print(f"NOTE: {RESOLVES} resolutions is an assumption. How many times ComfyUI\n"
           f"      really resolves a model per run is UNCHECKED until a real render.")
     return 0 if ok else 1
+
+
+def test_main():
+    # main() reads an optional size-override from sys.argv[1]; under pytest
+    # that slot holds pytest's own CLI args (e.g. "-q"), not a GiB float, so
+    # clear it for the duration of this call. Standalone invocation
+    # (`python test_large_asset.py 4`) is unaffected -- this only runs when
+    # pytest itself has already parsed and consumed its own argv.
+    saved_argv, sys.argv[1:] = sys.argv[1:], []
+    try:
+        # See test_comfy_adapter.py's test_main(): covenant_gate() imports
+        # real ComfyUI's comfy.sd1_clip, which needs ComfyUI's own heavy
+        # deps -- not this test venv's. An environment gap, not a failure.
+        try:
+            result = main()
+        except ImportError as exc:
+            import pytest
+            pytest.skip(
+                f"a ComfyUI-side dependency is unavailable in this "
+                f"environment (run with ComfyUI's own venv instead): {exc}"
+            )
+    finally:
+        sys.argv[1:] = saved_argv
+    assert result == 0
 
 
 if __name__ == "__main__":

@@ -31,7 +31,24 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _paths import HERE, SUITE_ROOT_ENV, bootstrap_comfy  # noqa: E402
+from _paths import (  # noqa: E402
+    HERE, SUITE_ROOT_ENV, bootstrap_comfy, find_comfyui_root, skip_or_die,
+)
+
+# Standalone (`python test_comfy_node.py`) stays fail-closed: a missing
+# ComfyUI checkout is a hard SystemExit out of bootstrap_comfy() below, with
+# its own detailed, unchanged message -- deliberate, see _paths.py. Under
+# pytest that same SystemExit would crash collection instead of reporting a
+# result, so probe first and turn a miss into a clean module-level skip
+# before ever calling the raising bootstrap. (This has to happen BEFORE the
+# suite-root check below: bootstrap_comfy() resolves ComfyUI unconditionally,
+# even with need_suite=False.)
+if find_comfyui_root() is None and "pytest" in sys.modules:
+    skip_or_die(
+        "no ComfyUI checkout found (see _paths.py) -- set COMFYUI_ROOT to "
+        "run this test against a real ComfyUI install",
+        exit_code=1,
+    )
 
 # NOTE: the NODE no longer needs smoke_trust -- it falls back to the vendored
 # LocalKeySigner/DemoSigner and TSAClient and loads standalone (proven
@@ -55,7 +72,8 @@ if SUITE is None:
     print("         suite root to exercise the second-installed-copy case. Set")
     print("         SMOKE_COVENANT_SUITE to a smoke-suite checkout to run it.")
     print("=" * 72)
-    raise SystemExit(0)
+    skip_or_die("no smoke-suite checkout found -- this check is in-tree only "
+                "(set SMOKE_COVENANT_SUITE to run it)", exit_code=0)
 
 import folder_paths  # noqa: E402  (real ComfyUI)
 
@@ -121,7 +139,7 @@ def graph_for(config: Path, lora_name: str, *, with_loader: bool = True) -> dict
 # --- checks ------------------------------------------------------------------
 
 
-def test_import_and_mappings(pkg) -> None:
+def check_import_and_mappings(pkg) -> None:
     banner("1. ComfyUI custom-node convention (nodes.py:2276-2282)")
     ccm = getattr(pkg, "NODE_CLASS_MAPPINGS", None)
     ndn = getattr(pkg, "NODE_DISPLAY_NAME_MAPPINGS", None)
@@ -150,7 +168,7 @@ def test_import_and_mappings(pkg) -> None:
     check("IS_CHANGED forces re-execution", cls.IS_CHANGED() != cls.IS_CHANGED())
 
 
-def test_seam_registered(pkg) -> None:
+def check_seam_registered(pkg) -> None:
     banner("2. per-prompt seam: registered as a lifecycle-only CacheProvider")
     from comfy_execution.cache_provider import _get_cache_providers
 
@@ -164,7 +182,7 @@ def test_seam_registered(pkg) -> None:
     check("on_store is a no-op", asyncio.run(provider.on_store(None, None)) is None)
 
 
-def test_lifecycle(pkg, config: Path, granted: Path) -> None:
+def check_lifecycle(pkg, config: Path, granted: Path) -> None:
     banner("3. the bracket: opens at prompt start, closes at prompt end")
     import comfy.sd1_clip as sd1
 
@@ -204,7 +222,7 @@ def test_lifecycle(pkg, config: Path, granted: Path) -> None:
           provider.current_session() is None)
 
 
-def test_not_armed_and_bad_config(pkg, tmp: Path, granted: Path) -> None:
+def check_not_armed_and_bad_config(pkg, tmp: Path, granted: Path) -> None:
     banner("4. prompts we must NOT touch, and configs we must refuse")
     provider = pkg.session.provider()
     pristine = folder_paths.get_full_path
@@ -229,7 +247,7 @@ def test_not_armed_and_bad_config(pkg, tmp: Path, granted: Path) -> None:
     provider.on_prompt_end("p-badcfg")
 
 
-def test_refusal(pkg, config: Path, granted: Path, ungranted: Path) -> None:
+def check_refusal(pkg, config: Path, granted: Path, ungranted: Path) -> None:
     banner("5. an ungranted asset is refused mid-prompt")
     from smoke_covenant.adapters.comfy import ComfyGateRefusal
 
@@ -248,7 +266,7 @@ def test_refusal(pkg, config: Path, granted: Path, ungranted: Path) -> None:
     provider.on_prompt_end("p-refuse")
 
 
-def test_thread_affinity(pkg, config: Path, granted: Path, ungranted: Path) -> None:
+def check_thread_affinity(pkg, config: Path, granted: Path, ungranted: Path) -> None:
     banner("6. thread affinity: ComfyUI's web thread cannot poison a render")
     provider = pkg.session.provider()
     provider._resolve_graph = lambda pid: graph_for(config, granted.name)
@@ -283,7 +301,7 @@ def test_thread_affinity(pkg, config: Path, granted: Path, ungranted: Path) -> N
     provider.on_prompt_end("p-thread")
 
 
-def test_completeness_unit(pkg, config: Path, granted: Path) -> None:
+def check_completeness_unit(pkg, config: Path, granted: Path) -> None:
     banner("7. completeness check: ancestors only, cached loader detected")
     comp = pkg.completeness
     graph = graph_for(config, granted.name)
@@ -306,7 +324,7 @@ def test_completeness_unit(pkg, config: Path, granted: Path) -> None:
           comp.missing_ingredients(graph, "9", [granted.name]) == {})
 
 
-def test_node_end_to_end(pkg, config: Path, granted: Path, tmp: Path) -> None:
+def check_node_end_to_end(pkg, config: Path, granted: Path, tmp: Path) -> None:
     banner("8. the node itself: refuses without a gate, issues with one")
     import torch
     from smoke_covenant import CovenantError, Covenant, verify
@@ -388,7 +406,7 @@ def test_node_end_to_end(pkg, config: Path, granted: Path, tmp: Path) -> None:
         check("a one-byte change breaks verification", True)
 
 
-def test_second_copy(pkg, tmp: Path) -> None:
+def check_second_copy(pkg, tmp: Path) -> None:
     """A copied (not symlinked) install, loaded the way nodes.py loads it."""
     banner("9. a second installed copy adopts the seam instead of doubling it")
     import importlib.util
@@ -437,15 +455,15 @@ def main() -> int:
     check("comfy_node imports", True, f"suite root {pkg.SUITE_ROOT}")
 
     try:
-        test_import_and_mappings(pkg)
-        test_seam_registered(pkg)
-        test_lifecycle(pkg, config, granted)
-        test_not_armed_and_bad_config(pkg, tmp, granted)
-        test_refusal(pkg, config, granted, ungranted)
-        test_thread_affinity(pkg, config, granted, ungranted)
-        test_completeness_unit(pkg, config, granted)
-        test_node_end_to_end(pkg, config, granted, tmp)
-        test_second_copy(pkg, tmp)
+        check_import_and_mappings(pkg)
+        check_seam_registered(pkg)
+        check_lifecycle(pkg, config, granted)
+        check_not_armed_and_bad_config(pkg, tmp, granted)
+        check_refusal(pkg, config, granted, ungranted)
+        check_thread_affinity(pkg, config, granted, ungranted)
+        check_completeness_unit(pkg, config, granted)
+        check_node_end_to_end(pkg, config, granted, tmp)
+        check_second_copy(pkg, tmp)
     finally:
         for f in (granted, ungranted):
             f.unlink(missing_ok=True)
@@ -458,6 +476,23 @@ def main() -> int:
         return 1
     print("All custom-node checks passed against real ComfyUI.")
     return 0
+
+
+def test_main():
+    # See test_comfy_adapter.py's test_main(): the gate's embed hook imports
+    # real ComfyUI's comfy.sd1_clip, which needs ComfyUI's own heavy deps
+    # (transformers, torch, ...) -- not this test venv's. That surfaces as an
+    # ImportError deep inside main(), an environment gap rather than a real
+    # failure, so skip rather than fail.
+    try:
+        result = main()
+    except ImportError as exc:
+        import pytest
+        pytest.skip(
+            f"a ComfyUI-side dependency is unavailable in this environment "
+            f"(run with ComfyUI's own venv instead): {exc}"
+        )
+    assert result == 0
 
 
 if __name__ == "__main__":

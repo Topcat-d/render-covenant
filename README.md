@@ -87,6 +87,23 @@ you install anything and tells you exactly what is missing:
 python doctor.py
 ```
 
+## Tests
+
+Nine top-level `test_*.py` scripts, each runnable directly
+(`python test_toctou.py`, exit 0 on pass) or via `pytest`:
+
+```sh
+pip install -e . pytest
+python -m pytest -q
+```
+
+Four need only `cryptography` and always run for real. The other five —
+everything that touches a real ComfyUI checkout or the private smoke-suite
+monorepo — SKIP cleanly with the reason why when that dependency isn't
+present, instead of failing or crashing collection; set `COMFYUI_ROOT` and/or
+`SMOKE_COVENANT_SUITE` to run them for real. See `.github/workflows/ci.yml`
+for exactly what CI verifies.
+
 ## Start here
 
 **[QUICKSTART.md](QUICKSTART.md)** — a 60-second demo needing no ComfyUI, no

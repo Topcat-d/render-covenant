@@ -19,7 +19,20 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _paths import bootstrap_comfy  # noqa: E402
+from _paths import bootstrap_comfy, find_comfyui_root, skip_or_die  # noqa: E402
+
+# Standalone (`python test_comfy_adapter.py`) stays fail-closed: a missing
+# ComfyUI checkout is a hard SystemExit out of bootstrap_comfy() below, with
+# its own detailed, unchanged message -- deliberate, see _paths.py. Under
+# pytest that same SystemExit would crash collection instead of reporting a
+# result, so probe first and turn a miss into a clean module-level skip
+# before ever calling the raising bootstrap.
+if find_comfyui_root() is None and "pytest" in sys.modules:
+    skip_or_die(
+        "no ComfyUI checkout found (see _paths.py) -- set COMFYUI_ROOT to "
+        "run this test against a real ComfyUI install",
+        exit_code=1,
+    )
 
 COMFY, SUITE = bootstrap_comfy()
 
@@ -125,8 +138,6 @@ def main() -> int:
     return 0
 
 
-
-
 def test_staging_redirects_the_loader_to_gate_owned_bytes():
     """The TOCTOU fix must reach the ADAPTER, not just the library.
 
@@ -150,8 +161,22 @@ def test_staging_redirects_the_loader_to_gate_owned_bytes():
     gate = HermeticGate(store, toy_territory_window_policy(), ctx)
     staging = Path(tempfile.mkdtemp(prefix="covenant-stage-"))
 
-    with covenant_gate(gate, staging_dir=staging):
-        returned = folder_paths.get_full_path("loras", f.name)
+    try:
+        with covenant_gate(gate, staging_dir=staging):
+            returned = folder_paths.get_full_path("loras", f.name)
+    except ImportError as exc:
+        # Same environment gap as test_main() (see its comment): covenant_gate()
+        # imports real ComfyUI's comfy.sd1_clip, which needs ComfyUI's own
+        # heavy deps, not this test venv's. Only skip under pytest -- standalone
+        # (this file's documented run line uses ComfyUI's own venv, which has
+        # those deps) keeps its original crash-on-missing-dependency behavior.
+        if "pytest" in sys.modules:
+            import pytest
+            pytest.skip(
+                f"a ComfyUI-side dependency is unavailable in this environment "
+                f"(run with ComfyUI's own venv instead): {exc}"
+            )
+        raise
 
     check("get_full_path returns the STAGED path, not the original",
           returned is not None and Path(returned).resolve() != f.resolve(),
@@ -170,6 +195,25 @@ def test_staging_redirects_the_loader_to_gate_owned_bytes():
 
     f.unlink(missing_ok=True)
     folder_paths.cache_helper.clear()
+
+
+def test_main():
+    # covenant_gate() always installs the embed hook, which imports real
+    # ComfyUI's comfy.sd1_clip -- and that module pulls in ComfyUI's own
+    # heavy dependencies (transformers, torch, ...), which live in ComfyUI's
+    # OWN venv (see the module docstring's run line), not this test venv.
+    # A throwaway venv that only has this repo's own deps installed hits
+    # that as an ImportError deep inside main(), not at collection time --
+    # an environment gap, not a real failure, so skip rather than fail.
+    try:
+        result = main()
+    except ImportError as exc:
+        import pytest
+        pytest.skip(
+            f"a ComfyUI-side dependency is unavailable in this environment "
+            f"(run with ComfyUI's own venv instead): {exc}"
+        )
+    assert result == 0
 
 
 if __name__ == "__main__":
