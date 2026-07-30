@@ -30,8 +30,13 @@ ComfyUI-side scripts in this directory need a few more packages, from
 ComfyUI's own environment — see `requirements.txt`'s ComfyUI section or the
 `comfy` extra (`pip install -e .[comfy]`).
 
-No licence is declared for this package yet — that choice belongs to the
-repo owner and is intentionally left open in `pyproject.toml`.
+## Licence
+
+Apache License 2.0 — see [`LICENSE`](LICENSE) for the full text and
+[`NOTICE`](NOTICE) for vendored-code provenance and third-party attributions.
+`smoke_covenant/adapters/comfy.py` and `comfy_node/` hook GPL-3.0 ComfyUI's
+public extension points at runtime and vendor none of it; see `NOTICE` for
+why that keeps this project's own code under Apache-2.0.
 
 ## Start here
 

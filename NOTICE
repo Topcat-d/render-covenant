@@ -1,0 +1,75 @@
+Render Covenants
+Copyright 2026 Topcat-d
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not
+use this file except in compliance with the License. You may obtain a copy
+of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+License for the specific language governing permissions and limitations
+under the License.
+
+================================================================================
+VENDORED CODE
+================================================================================
+
+`smoke_covenant/_vendor/` carries code and extracted logic from the same
+author's `smoke-suite` monorepo (`trust/smoke_trust/`), under the same
+Apache-2.0 licence. Same author, same licence, no third-party origin —
+recorded here because a reader of the file alone cannot tell that.
+
+- `asn1.py` and `rfc3161.py` — exact copies of
+  `trust/smoke_trust/audit/asn1.py` and `trust/smoke_trust/audit/rfc3161.py`.
+  Byte-identity with the originals is asserted by SHA-256 in
+  `test_vendor_conformance.py`; do not edit these files or that check fails.
+
+- `primitives.py` — canonical-JSON and `smoke-merkle-v0` logic (canonical
+  JSON encoding, Merkle root/proof/verify) extracted from
+  `trust/smoke_trust/iea/contract.py` and
+  `trust/smoke_trust/attestation/windowed.py`. Reproduced as standalone
+  functions rather than copied wholesale because the originals live inside
+  larger modules with unrelated dependencies; byte-for-byte behavioural
+  agreement with the originals is asserted by randomized differential
+  testing in `test_vendor_conformance.py`.
+
+- `signer.py` and `tsa.py` — demo/standalone equivalents of
+  `smoke_trust`'s `SoftwareMeasurementSigner` and
+  `smoke_trust.audit.anchor.TSAClient`, respectively: mechanically identical
+  in behaviour (same signing scheme, same RFC 3161 client defaults) but
+  written independently for this package so it does not hard-depend on a
+  `smoke-suite` checkout. Not byte-for-byte copies and not covered by the
+  conformance check above.
+
+================================================================================
+THIRD-PARTY SOFTWARE
+================================================================================
+
+This project depends on:
+
+- `cryptography` (https://github.com/pyca/cryptography) — dual-licensed,
+  Apache-2.0 OR BSD-3-Clause. Used under the Apache-2.0 branch of that
+  licence, consistent with the rest of this NOTICE.
+
+================================================================================
+THE COMFYUI BOUNDARY
+================================================================================
+
+ComfyUI (https://github.com/comfyanonymous/ComfyUI) is licensed GPL-3.0.
+This project vendors, patches, forks, or redistributes none of it.
+`smoke_covenant/adapters/comfy.py` and `comfy_node/` are runtime hooks: they
+import ComfyUI's public extension points (`folder_paths`,
+`comfy.sd1_clip.load_embed`, the `CacheProvider` registration point) at
+execution time, inside ComfyUI's own process, entirely at call time or load
+time within that process. No ComfyUI source is contained in, copied into, or
+modified by this repository. This is the established ComfyUI custom-node
+pattern and is conventionally treated as a separate work rather than a
+derivative one — see the module docstrings in `smoke_covenant/adapters/comfy.py`
+and `comfy_node/__init__.py` for the specific choke points hooked and the
+reasoning. That factual basis — no vendored or modified ComfyUI code, only a
+runtime import of its public extension points — is why this project's own
+code is licensed Apache-2.0 here. No general conclusion about GPL-3.0/
+Apache-2.0 compatibility is asserted beyond that.

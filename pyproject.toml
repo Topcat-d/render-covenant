@@ -11,10 +11,10 @@ version = "0.1.0"
 description = "Render Covenants: hermetic build provenance for media -- binds a signed, offline-verifiable rights decision to the exact bytes a render actually produced. Not a rights engine; see README.md."
 readme = "README.md"
 requires-python = ">=3.11"
-# LICENSE: deliberately left unset. Choosing a licence for this package is
-# the repo owner's decision and is out of scope for this packaging pass --
-# see README.md. Do not add a `license` key or a `License ::` classifier
-# here until that decision is made.
+license = { text = "Apache-2.0" }
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+]
 dependencies = [
     "cryptography>=41.0.0",
 ]
