@@ -443,18 +443,19 @@ def check_second_copy(pkg, tmp: Path) -> None:
 
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="covenant-node-test-"))
-    granted, ungranted, config = make_assets(tmp)
-    print("=" * 72)
-    print(f"Render Covenant custom node vs real ComfyUI  ({COMFY})")
-    print("=" * 72)
+    granted = ungranted = None
     try:
-        import comfy_node as pkg  # the package under test, imported as ComfyUI would
-    except Exception as exc:  # noqa: BLE001
-        check("comfy_node imports", False, f"{type(exc).__name__}: {exc}")
-        return 1
-    check("comfy_node imports", True, f"suite root {pkg.SUITE_ROOT}")
+        granted, ungranted, config = make_assets(tmp)
+        print("=" * 72)
+        print(f"Render Covenant custom node vs real ComfyUI  ({COMFY})")
+        print("=" * 72)
+        try:
+            import comfy_node as pkg  # the package under test, imported as ComfyUI would
+        except Exception as exc:  # noqa: BLE001
+            check("comfy_node imports", False, f"{type(exc).__name__}: {exc}")
+            return 1
+        check("comfy_node imports", True, f"suite root {pkg.SUITE_ROOT}")
 
-    try:
         check_import_and_mappings(pkg)
         check_seam_registered(pkg)
         check_lifecycle(pkg, config, granted)
@@ -465,8 +466,13 @@ def main() -> int:
         check_node_end_to_end(pkg, config, granted, tmp)
         check_second_copy(pkg, tmp)
     finally:
-        for f in (granted, ungranted):
-            f.unlink(missing_ok=True)
+        # Guaranteed even if comfy_node fails to import (previously an early
+        # `return 1` skipped cleanup entirely) or any check above raises: these
+        # fixtures live in the REAL ComfyUI checkout and must never be stranded.
+        if granted is not None:
+            granted.unlink(missing_ok=True)
+        if ungranted is not None:
+            ungranted.unlink(missing_ok=True)
         folder_paths.cache_helper.clear()
         shutil.rmtree(tmp, ignore_errors=True)
 

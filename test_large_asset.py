@@ -64,55 +64,60 @@ def main() -> int:
         return 1
 
     print(f"writing {size_gib:.1f} GiB stand-in asset...", flush=True)
-    t0 = time.perf_counter()
-    chunk = os.urandom(1 << 20)
-    with open(big, "wb") as fh:
-        for _ in range(nbytes // len(chunk)):
-            fh.write(chunk)
-    print(f"  wrote in {time.perf_counter() - t0:.1f}s")
-    folder_paths.cache_helper.clear()
+    try:
+        t0 = time.perf_counter()
+        chunk = os.urandom(1 << 20)
+        with open(big, "wb") as fh:
+            for _ in range(nbytes // len(chunk)):
+                fh.write(chunk)
+        print(f"  wrote in {time.perf_counter() - t0:.1f}s")
+        folder_paths.cache_helper.clear()
 
-    store = AssetStore()
-    t0 = time.perf_counter()
-    store.register(big, Grant(
-        grant_id="model_grant_big", asset_digest="", kind="model_grant",
-        terms={"territories": ["US"], "expires_on": "2028-01-01"},
-        signer_spki="demo-brand"), label=big.name)
-    reg_s = time.perf_counter() - t0
-    print(f"\nregister (1 full hash): {reg_s:.2f}s = {size_gib / reg_s:.2f} GiB/s")
+        store = AssetStore()
+        t0 = time.perf_counter()
+        store.register(big, Grant(
+            grant_id="model_grant_big", asset_digest="", kind="model_grant",
+            terms={"territories": ["US"], "expires_on": "2028-01-01"},
+            signer_spki="demo-brand"), label=big.name)
+        reg_s = time.perf_counter() - t0
+        print(f"\nregister (1 full hash): {reg_s:.2f}s = {size_gib / reg_s:.2f} GiB/s")
 
-    ctx = {"territory": "US", "channels": ["paid-social"], "release_end": "2027-02-01"}
-    gate = HermeticGate(store, toy_territory_window_policy(), ctx)
+        ctx = {"territory": "US", "channels": ["paid-social"], "release_end": "2027-02-01"}
+        gate = HermeticGate(store, toy_territory_window_policy(), ctx)
 
-    timings = []
-    with covenant_gate(gate):
-        for i in range(RESOLVES):
-            t0 = time.perf_counter()
-            folder_paths.get_full_path("loras", big.name)
-            timings.append(time.perf_counter() - t0)
+        timings = []
+        with covenant_gate(gate):
+            for i in range(RESOLVES):
+                t0 = time.perf_counter()
+                folder_paths.get_full_path("loras", big.name)
+                timings.append(time.perf_counter() - t0)
 
-    cold, warm = timings[0], timings[1:]
-    print(f"resolve #1 (cold):      {cold:.2f}s")
-    print(f"resolve #2-{RESOLVES} (memo):    " +
-          ", ".join(f"{t * 1000:.1f}ms" for t in warm))
+        cold, warm = timings[0], timings[1:]
+        print(f"resolve #1 (cold):      {cold:.2f}s")
+        print(f"resolve #2-{RESOLVES} (memo):    " +
+              ", ".join(f"{t * 1000:.1f}ms" for t in warm))
 
-    naive = cold * RESOLVES
-    actual = sum(timings)
-    print(f"\nwithout memo would be:  {naive:.2f}s ({RESOLVES} full hashes)")
-    print(f"actual:                 {actual:.2f}s")
-    print(f"saved:                  {naive - actual:.2f}s "
-          f"({(1 - actual / naive) * 100:.0f}%)")
+        naive = cold * RESOLVES
+        actual = sum(timings)
+        print(f"\nwithout memo would be:  {naive:.2f}s ({RESOLVES} full hashes)")
+        print(f"actual:                 {actual:.2f}s")
+        print(f"saved:                  {naive - actual:.2f}s "
+              f"({(1 - actual / naive) * 100:.0f}%)")
 
-    ok = True
-    if len(gate.ingredients) != 1:
-        print(f"FAIL: recorded {len(gate.ingredients)} ingredients, expected 1")
-        ok = False
-    if max(warm) > cold * 0.25:
-        print(f"FAIL: memo not effective -- warm {max(warm):.2f}s vs cold {cold:.2f}s")
-        ok = False
-
-    big.unlink(missing_ok=True)
-    folder_paths.cache_helper.clear()
+        ok = True
+        if len(gate.ingredients) != 1:
+            print(f"FAIL: recorded {len(gate.ingredients)} ingredients, expected 1")
+            ok = False
+        if max(warm) > cold * 0.25:
+            print(f"FAIL: memo not effective -- warm {max(warm):.2f}s vs cold {cold:.2f}s")
+            ok = False
+    finally:
+        # Guaranteed even if covenant_gate() raises (e.g. the transformers
+        # ImportError that test_main() turns into a pytest skip): this is a
+        # multi-GiB stand-in written straight into the REAL ComfyUI checkout,
+        # exactly the kind of file that must never be stranded there.
+        big.unlink(missing_ok=True)
+        folder_paths.cache_helper.clear()
 
     print("\n" + ("PASS: memo holds at checkpoint scale, 1 ingredient recorded."
                   if ok else "FAILED"))

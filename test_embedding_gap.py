@@ -78,79 +78,83 @@ def main() -> int:
     # -- a real property, caught by getting the fixture wrong.)
     save_file({"emb_params": torch.full((1, 768), 0.11)}, str(granted))
     save_file({"emb_params": torch.full((1, 768), 0.22)}, str(ungranted))
-
-    store = AssetStore()
-    store.register(granted, Grant(
-        grant_id="licence:CreativeML OpenRAIL-M", asset_digest="", kind="model_licence",
-        terms=LICENCE_TERMS["creativeml-openrail-m"],
-        signer_spki="huggingface:embed-author"), label=granted.name)
-    store.register(ungranted, Grant(
-        grant_id="licence:CC-BY-NC-4.0", asset_digest="", kind="model_licence",
-        terms=LICENCE_TERMS["cc-by-nc-4.0"],
-        signer_spki="huggingface:embed-author"), label=ungranted.name)
-
-    ctx = {"territory": "US", "channels": ["paid-social"], "release_end": "2027-02-01",
-           "commercial": True, "intended_uses": ["advertising"]}
-    dirs = folder_paths.get_folder_paths("embeddings")
-
-    print("=" * 74)
-    print("nodes.py:629 embedding coverage gap")
-    print("=" * 74)
-
-    # 0. the gap itself: without the hook, load_embed never touches the gate
-    gate0 = HermeticGate(store, media_licence_policy(), ctx)
-    sd1.load_embed(granted.stem, dirs, 768, "clip_l")
-    check("WITHOUT the hook an embedding loads unseen (the original gap)",
-          len(gate0.ingredients) == 0)
-
-    # 1. permitted embedding is admitted and recorded as role=embedding
-    gate1 = HermeticGate(store, media_licence_policy(), ctx)
-    with covenant_gate(gate1):
-        out = sd1.load_embed(granted.stem, dirs, 768, "clip_l")
-    check("permitted embedding loads", out is not None)
-    check("recorded as an ingredient", len(gate1.ingredients) == 1,
-          f"got {len(gate1.ingredients)}")
-    if gate1.ingredients:
-        check("role is 'embedding'", gate1.ingredients[0].role == "embedding",
-              f"role={gate1.ingredients[0].role}")
-
-    # 2. THE FIX: a CC-BY-NC embedding in a commercial render is now BLOCKED
-    gate2 = HermeticGate(store, media_licence_policy(), ctx)
-    refused = False
-    msg = ""
-    with covenant_gate(gate2):
-        try:
-            sd1.load_embed(ungranted.stem, dirs, 768, "clip_l")
-        except ComfyGateRefusal as exc:
-            refused, msg = True, str(exc).splitlines()[0]
-    check("CC-BY-NC embedding is REFUSED in a paid ad", refused,
-          msg if refused else "it loaded -- the gap is still open")
-
-    # 3. an unregistered embedding is refused too
     stray = emb_dir / "covenant_stray_embed.safetensors"
-    save_file({"emb_params": torch.full((1, 768), 0.33)}, str(stray))
-    gate3 = HermeticGate(store, media_licence_policy(), ctx)
-    stray_refused = False
-    with covenant_gate(gate3):
-        try:
-            sd1.load_embed(stray.stem, dirs, 768, "clip_l")
-        except ComfyGateRefusal:
-            stray_refused = True
-    check("unregistered embedding is REFUSED", stray_refused)
 
-    # 4. a name that resolves to nothing must not be treated as an asset
-    gate4 = HermeticGate(store, media_licence_policy(), ctx)
-    with covenant_gate(gate4):
-        missing = sd1.load_embed("covenant_no_such_embed_xyz", dirs, 768, "clip_l")
-    check("missing embedding records nothing",
-          missing is None and len(gate4.ingredients) == 0)
+    try:
+        store = AssetStore()
+        store.register(granted, Grant(
+            grant_id="licence:CreativeML OpenRAIL-M", asset_digest="", kind="model_licence",
+            terms=LICENCE_TERMS["creativeml-openrail-m"],
+            signer_spki="huggingface:embed-author"), label=granted.name)
+        store.register(ungranted, Grant(
+            grant_id="licence:CC-BY-NC-4.0", asset_digest="", kind="model_licence",
+            terms=LICENCE_TERMS["cc-by-nc-4.0"],
+            signer_spki="huggingface:embed-author"), label=ungranted.name)
 
-    # 5. the patch is fully removed on exit
-    check("load_embed restored", sd1.load_embed.__name__ == "load_embed",
-          f"still {sd1.load_embed.__name__}")
+        ctx = {"territory": "US", "channels": ["paid-social"], "release_end": "2027-02-01",
+               "commercial": True, "intended_uses": ["advertising"]}
+        dirs = folder_paths.get_folder_paths("embeddings")
 
-    for f in (granted, ungranted, stray):
-        f.unlink(missing_ok=True)
+        print("=" * 74)
+        print("nodes.py:629 embedding coverage gap")
+        print("=" * 74)
+
+        # 0. the gap itself: without the hook, load_embed never touches the gate
+        gate0 = HermeticGate(store, media_licence_policy(), ctx)
+        sd1.load_embed(granted.stem, dirs, 768, "clip_l")
+        check("WITHOUT the hook an embedding loads unseen (the original gap)",
+              len(gate0.ingredients) == 0)
+
+        # 1. permitted embedding is admitted and recorded as role=embedding
+        gate1 = HermeticGate(store, media_licence_policy(), ctx)
+        with covenant_gate(gate1):
+            out = sd1.load_embed(granted.stem, dirs, 768, "clip_l")
+        check("permitted embedding loads", out is not None)
+        check("recorded as an ingredient", len(gate1.ingredients) == 1,
+              f"got {len(gate1.ingredients)}")
+        if gate1.ingredients:
+            check("role is 'embedding'", gate1.ingredients[0].role == "embedding",
+                  f"role={gate1.ingredients[0].role}")
+
+        # 2. THE FIX: a CC-BY-NC embedding in a commercial render is now BLOCKED
+        gate2 = HermeticGate(store, media_licence_policy(), ctx)
+        refused = False
+        msg = ""
+        with covenant_gate(gate2):
+            try:
+                sd1.load_embed(ungranted.stem, dirs, 768, "clip_l")
+            except ComfyGateRefusal as exc:
+                refused, msg = True, str(exc).splitlines()[0]
+        check("CC-BY-NC embedding is REFUSED in a paid ad", refused,
+              msg if refused else "it loaded -- the gap is still open")
+
+        # 3. an unregistered embedding is refused too
+        save_file({"emb_params": torch.full((1, 768), 0.33)}, str(stray))
+        gate3 = HermeticGate(store, media_licence_policy(), ctx)
+        stray_refused = False
+        with covenant_gate(gate3):
+            try:
+                sd1.load_embed(stray.stem, dirs, 768, "clip_l")
+            except ComfyGateRefusal:
+                stray_refused = True
+        check("unregistered embedding is REFUSED", stray_refused)
+
+        # 4. a name that resolves to nothing must not be treated as an asset
+        gate4 = HermeticGate(store, media_licence_policy(), ctx)
+        with covenant_gate(gate4):
+            missing = sd1.load_embed("covenant_no_such_embed_xyz", dirs, 768, "clip_l")
+        check("missing embedding records nothing",
+              missing is None and len(gate4.ingredients) == 0)
+
+        # 5. the patch is fully removed on exit
+        check("load_embed restored", sd1.load_embed.__name__ == "load_embed",
+              f"still {sd1.load_embed.__name__}")
+    finally:
+        # Guaranteed even if a check above raises: these fixtures live in the
+        # REAL ComfyUI checkout and must never be stranded there. `stray` may
+        # not exist yet if we abort before check 3 -- unlink is missing_ok.
+        for f in (granted, ungranted, stray):
+            f.unlink(missing_ok=True)
 
     print("=" * 74)
     if failures:
